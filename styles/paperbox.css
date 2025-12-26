@@ -1,0 +1,178 @@
+﻿/* =========================================
+   PaperBox VTT - Native Slider Style
+   ========================================= */
+
+:root {
+    --pb-angle: 0deg;
+    --pb-counter-angle: 0deg;
+    --pb-rotation: 0deg;
+    --pb-counter-rotation: 0deg;
+    --pb-perspective: 2000px;
+    
+    /* User Provided Palette */
+    --pb-bg: #434d5a;
+    --pb-track: #e4dfd3;      /* $color-background */
+    --pb-fill: #fe9996;       /* $color-highlight */
+    --pb-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+/* 1. Core 3D Engine */
+body.paperbox-active #board {
+    transform: perspective(var(--pb-perspective)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation));
+    transform-style: preserve-3d;
+    transition: transform 0.1s linear;
+}
+
+body.paperbox-active .token {
+    transform: rotateZ(var(--pb-counter-rotation)) rotateX(var(--pb-counter-angle)) scale(1.4);
+    transform-origin: bottom center;
+    filter: drop-shadow(0px 10px 5px rgba(0,0,0,0.6));
+    transition: transform 0.1s linear;
+    backface-visibility: hidden;
+}
+
+/* 2. HUD Container */
+.pb-hud-panel {
+    position: fixed;
+    /* background: var(--pb-bg); Removed background */
+    /* border-radius: 8px; */
+    /* box-shadow: var(--pb-shadow); Removed shadow */
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+#pb-hud-tilt {
+    top: 20%;
+    right: 20px;
+    height: 300px;
+    width: 80px;
+    flex-direction: column;
+}
+
+#pb-hud-rot {
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 400px;
+    height: 100px;
+    flex-direction: row;
+}
+
+/* Lock Button */
+.pb-lock-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--pb-track);
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+    margin: 5px;
+}
+.pb-lock-btn:hover { color: #fff; }
+.pb-lock-btn.active { color: var(--pb-fill); }
+
+/* 3. Native Slider Styling (Simplified) */
+.pb-slider-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#pb-cont-tilt {
+    height: 200px;
+    width: 40px;
+}
+
+#pb-cont-rot {
+    width: 300px;
+    height: 40px;
+}
+
+/* Slider Input */
+.pb-slider {
+    -webkit-appearance: none; /* Override default look */
+    appearance: none;
+    background: transparent; /* No track background */
+    position: absolute;
+    margin: 0;
+    z-index: 2;
+}
+
+/* Track - Make it invisible or very subtle if "sem background" applies to track too */
+.pb-slider::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 8px;
+    background: rgba(0, 0, 0, 0.2); /* Subtle track */
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+/* Thumb - The "Box" */
+.pb-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    height: 20px;
+    width: 20px;
+    background: var(--pb-fill); /* Pink box */
+    border-radius: 2px; /* Slightly rounded box */
+    cursor: grab;
+    margin-top: -6px; /* Center on track */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+}
+
+#pb-slider-tilt {
+    width: 200px; /* Rotated, so width becomes height */
+    height: 20px;
+    transform: rotate(-90deg);
+    transform-origin: center;
+}
+
+#pb-slider-rot {
+    width: 100%;
+    height: 20px;
+}
+
+/* Hide Rulers and Visuals for "Basic" look */
+.pb-ruler, .pb-tick, .pb-angle-visual, .pb-value-display {
+    display: none;
+}
+
+
+#pb-cont-rot .pb-value-display span {
+    transform: rotate(-45deg);
+}
+
+/* Pequeno ajuste para o texto ficar legível */
+.pb-value-display {
+    text-align: center;
+    line-height: 1;
+}
+
+/* 6. Botões */
+.pb-lock-btn {
+    background: none;
+    border: none;
+    color: var(--pb-track);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 8px;
+    transition: color 0.2s;
+    z-index: 10;
+}
+
+.pb-lock-btn:hover {
+    color: var(--pb-fill);
+}
+
+.pb-lock-btn.active {
+    color: var(--pb-fill);
+}
