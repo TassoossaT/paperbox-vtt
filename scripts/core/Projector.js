@@ -35,8 +35,10 @@ export class Projector {
         pivotY -= window.pageYOffset;
 
         // 1. Screen Coordinates relative to Pivot
-        const screenX = clientX - pivotX;
-        const screenY = clientY - pivotY;
+        // Adjust for Scale (1.5) defined in CSS
+        const scale = 1.5;
+        const screenX = (clientX - pivotX) / scale;
+        const screenY = (clientY - pivotY) / scale;
 
         // 2. Get State
         const state = this.paperbox.state;

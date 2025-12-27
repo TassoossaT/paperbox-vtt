@@ -8,6 +8,7 @@
     --pb-rotation: 0deg;
     --pb-counter-rotation: 0deg;
     --pb-perspective: 2000px;
+    --pb-scale: 1.5; /* Scale to cover viewport corners when rotating */
     
     /* User Provided Palette */
     --pb-bg: #434d5a;
@@ -18,7 +19,7 @@
 
 /* 1. Core 3D Engine */
 body.paperbox-active #board {
-    transform: perspective(var(--pb-perspective)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation));
+    transform: perspective(var(--pb-perspective)) scale(var(--pb-scale)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation));
     transform-style: preserve-3d;
     transition: transform 0.1s linear;
 }
@@ -122,8 +123,9 @@ body.paperbox-active .token {
     appearance: none;
     height: 20px;
     width: 20px;
-    background: var(--pb-fill); /* Pink box */
-    border-radius: 2px; /* Slightly rounded box */
+    background: transparent; /* Transparent center */
+    border: 2px solid var(--pb-fill); /* Colored border */
+    border-radius: 2px;
     cursor: grab;
     margin-top: -6px; /* Center on track */
     box-shadow: 0 1px 3px rgba(0,0,0,0.5);
@@ -141,14 +143,76 @@ body.paperbox-active .token {
     height: 20px;
 }
 
-/* Hide Rulers and Visuals for "Basic" look */
-.pb-ruler, .pb-tick, .pb-angle-visual, .pb-value-display {
-    display: none;
+/* Visuals */
+.pb-ruler {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
 }
 
+.pb-tick {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 1px;
+}
+
+/* Tilt Ticks (Vertical) */
+#pb-ruler-tilt .pb-tick {
+    left: 50%;
+    width: 6px; /* Smaller width */
+    height: 1px;
+    transform: translateX(-50%);
+}
+#pb-ruler-tilt .pb-tick.major {
+    width: 12px;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+/* Rot Ticks (Horizontal) */
+#pb-ruler-rot .pb-tick {
+    top: 50%;
+    height: 6px; /* Smaller height */
+    width: 1px;
+    transform: translateY(-50%);
+}
+#pb-ruler-rot .pb-tick.major {
+    height: 12px;
+    background: rgba(255, 255, 255, 0.5);
+}
+
+.pb-angle-visual {
+    display: none; 
+}
+
+.pb-value-display {
+    position: absolute;
+    pointer-events: none;
+    z-index: 10;
+    width: 20px; /* Match thumb size */
+    height: 20px; /* Match thumb size */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    color: var(--pb-fill); /* Match border color */
+    text-shadow: 0 0 2px rgba(0,0,0,0.8); /* Dark shadow for contrast */
+}
+
+/* Specific positioning for Tilt Value */
+#pb-val-tilt {
+    left: 50%;
+    transform: translate(-50%, 50%); /* Center on thumb */
+}
+
+/* Specific positioning for Rot Value */
+#pb-val-rot {
+    top: 50%;
+    transform: translate(-50%, -50%); /* Center on thumb */
+}
 
 #pb-cont-rot .pb-value-display span {
-    transform: rotate(-45deg);
+    transform: none; 
 }
 
 /* Pequeno ajuste para o texto ficar legível */

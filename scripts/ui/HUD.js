@@ -10,9 +10,26 @@ export class HUD {
 
         const state = this.paperbox.state;
 
+        // Load saved positions
+        const posTilt = game.settings.get('paperbox-vtt', 'hudPosTilt') || { top: '20%', right: '20px' };
+        const posRot = game.settings.get('paperbox-vtt', 'hudPosRot') || { bottom: '20px', left: '50%' };
+
+        // Helper to format style string
+        const getStyle = (pos) => {
+            let s = '';
+            if (pos.top) s += `top: ${pos.top}; `;
+            if (pos.bottom) s += `bottom: ${pos.bottom}; `;
+            if (pos.left) s += `left: ${pos.left}; `;
+            if (pos.right) s += `right: ${pos.right}; `;
+            // Ensure transform is handled for rot if it was centered originally
+            if (pos.left === '50%' && !pos.left.includes('px')) s += 'transform: translateX(-50%); ';
+            else s += 'transform: none; ';
+            return s;
+        };
+
         // 1. Painel Vertical (Tilt)
         const htmlTilt = `
-            <div id="pb-hud-tilt" class="pb-hud-panel">
+            <div id="pb-hud-tilt" class="pb-hud-panel" style="${getStyle(posTilt)}">
                 <div class="pb-slider-container" id="pb-cont-tilt">
                     <div class="pb-value-display" id="pb-val-tilt"><span>${Math.round(state.tilt)}</span></div>
                     <div class="pb-ruler" id="pb-ruler-tilt"></div>
@@ -31,7 +48,7 @@ export class HUD {
         if (normRot > 180) normRot -= 360;
 
         const htmlRot = `
-            <div id="pb-hud-rot" class="pb-hud-panel">
+            <div id="pb-hud-rot" class="pb-hud-panel" style="${getStyle(posRot)}">
                 <button class="pb-lock-btn" id="pb-lock-rot" title="Travar Rotação"><i class="fas fa-unlock"></i></button>
                 <div class="pb-angle-visual" id="pb-vis-rot">
                     <div class="pb-vis-needle"></div>
@@ -45,18 +62,19 @@ export class HUD {
             </div>
         `;
 
+        // Append to body (default) or Sidebar if requested (future feature)
         $('body').append(htmlTilt);
         $('body').append(htmlRot);
 
         this.elementTilt = $('#pb-hud-tilt');
         this.elementRot = $('#pb-hud-rot');
 
-        this._generateTicks('pb-ruler-tilt', [0, 15, 30, 45, 60, 75, 85]);
-        this._generateTicks('pb-ruler-rot', [-180, -135, -90, -45, 0, 45, 90, 135, 180]);
+        this._generateTicks('pb-ruler-tilt', 0, 85, 15);
+        this._generateTicks('pb-ruler-rot', -180, 180, 15);
         
         this._activateListeners();
-        this._setupDraggable("pb-hud-tilt");
-        this._setupDraggable("pb-hud-rot");
+        this._setupDraggable("pb-hud-tilt", 'hudPosTilt');
+        this._setupDraggable("pb-hud-rot", 'hudPosRot');
         this._setupResizeObserver();
     }
 
@@ -71,27 +89,43 @@ export class HUD {
         const state = this.paperbox.state;
 
         // --- TILT (Vertical) ---
-        const pctTilt = (state.tilt / 85) * 100;
+        // Range 0 to 85
+        const ratioTilt = state.tilt / 85;
+        const pctTilt = ratioTilt * 100;
         
         $('#pb-slider-tilt').css('--pb-val-pct', `${pctTilt}%`);
+        
+        // Sync Text with Thumb Center
+        // Thumb is 20px. Track is full height.
+        // The thumb center moves from 10px (min) to Height-10px (max).
+        // Formula: Center = 10 + (Height - 20) * ratio
+        // In percentage of track (assuming track is container):
+        // We can use calc in CSS, or calculate pixels here. 
+        // Let's use the calc formula for precision: calc(Ratio% + (10 - Ratio*20)px)
+        const offsetTilt = 10 - (ratioTilt * 20);
+
         $('#pb-val-tilt')
             .find('span').text(Math.round(state.tilt)).end()
-            .css('bottom', `${pctTilt}%`);
+            .css('bottom', `calc(${pctTilt}% + ${offsetTilt}px)`);
         
         // Visual Indicator for Tilt (Side view arc)
-        // Rotate needle from 0 (flat) to -85 (upright)
         $('#pb-vis-tilt .pb-vis-needle').css('transform', `rotate(${-state.tilt}deg)`);
 
         // --- ROTATION (Horizontal) ---
         let normRot = ((state.rotation % 360) + 360) % 360;
         if (normRot > 180) normRot -= 360;
         
-        const pctRot = ((normRot + 180) / 360) * 100;
+        // Range -180 to 180 (Total 360)
+        const ratioRot = (normRot + 180) / 360;
+        const pctRot = ratioRot * 100;
 
         $('#pb-slider-rot').css('--pb-val-pct', `${pctRot}%`);
+        
+        const offsetRot = 10 - (ratioRot * 20);
+
         $('#pb-val-rot')
             .find('span').text(Math.round(normRot)).end()
-            .css('left', `${pctRot}%`);
+            .css('left', `calc(${pctRot}% + ${offsetRot}px)`);
 
         // Visual Indicator for Rotation (Compass)
         $('#pb-vis-rot .pb-vis-needle').css('transform', `rotate(${normRot}deg)`);
@@ -104,13 +138,17 @@ export class HUD {
         if (sRot.length && !sRot.is(':active')) sRot.val(normRot);
     }
 
-    _generateTicks(containerId, values) {
+    _generateTicks(containerId, min, max, step) {
         const container = $(`#${containerId}`);
         container.empty();
         
-        const min = values[0];
-        const max = values[values.length - 1];
         const totalRange = max - min;
+        const values = [];
+        for (let v = min; v <= max; v += step) {
+            values.push(v);
+        }
+        // Ensure max is included if not hit by step
+        if (values[values.length - 1] !== max) values.push(max);
 
         values.forEach(val => {
             let pct = ((val - min) / totalRange) * 100;
@@ -122,7 +160,8 @@ export class HUD {
                 tick.css('left', `${pct}%`);
             }
 
-            if ([0, 45, -45, 90, -90].includes(val)) {
+            // Major ticks every 45 degrees or 0
+            if (val % 45 === 0 || val === 0) {
                 tick.addClass('major');
             }
             container.append(tick);
@@ -130,15 +169,33 @@ export class HUD {
     }
 
     _activateListeners() {
+        // Helper for snapping
+        const snap = (val, step = 15, threshold = 5) => {
+            const remainder = val % step;
+            if (Math.abs(remainder) < threshold) return val - remainder;
+            if (Math.abs(remainder) > step - threshold) return val + (step * Math.sign(val)) - remainder;
+            return val;
+        };
+
         // Sliders
         $('#pb-slider-tilt').on('input', (e) => {
             if (this.paperbox.state.lockedTilt) return;
-            this.paperbox.setState({ tilt: parseInt(e.target.value) });
+            let val = parseInt(e.target.value);
+            val = snap(val);
+            // Update visual if snapped
+            if (val !== parseInt(e.target.value)) {
+                // We don't force the slider value immediately to avoid "fighting" the user, 
+                // but we update the state which updates the visual.
+                // Actually, for snapping to feel "magnetic", we might want to update the state to the snapped value.
+            }
+            this.paperbox.setState({ tilt: val });
         });
 
         $('#pb-slider-rot').on('input', (e) => {
             if (this.paperbox.state.lockedRotation) return;
-            this.paperbox.setState({ rotation: parseInt(e.target.value) });
+            let val = parseInt(e.target.value);
+            val = snap(val);
+            this.paperbox.setState({ rotation: val });
         });
 
         // Locks
@@ -164,7 +221,7 @@ export class HUD {
         }
     }
 
-    _setupDraggable(id) {
+    _setupDraggable(id, settingKey) {
         const elm = document.getElementById(id);
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
 
@@ -191,11 +248,24 @@ export class HUD {
             elm.style.left = (elm.offsetLeft - pos1) + "px";
             elm.style.right = 'auto';
             elm.style.bottom = 'auto';
+            // Remove transform if we are dragging, to avoid confusion with centered elements
+            elm.style.transform = 'none';
         }
 
         function closeDragElement() {
             document.onmouseup = null;
             document.onmousemove = null;
+            
+            // Save position
+            if (settingKey) {
+                const pos = {
+                    top: elm.style.top,
+                    left: elm.style.left,
+                    bottom: 'auto',
+                    right: 'auto'
+                };
+                game.settings.set('paperbox-vtt', settingKey, pos);
+            }
         }
     }
 
