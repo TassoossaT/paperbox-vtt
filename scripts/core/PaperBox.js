@@ -3,6 +3,7 @@ import { RenderEngine } from "./RenderEngine.js";
 import { InputManager } from "./InputManager.js";
 import { HUD } from "../ui/HUD.js";
 import { Projector } from "./Projector.js";
+import { WallBuilder } from "./WallBuilder.js";
 
 export class PaperBox {
     constructor() {
@@ -13,13 +14,19 @@ export class PaperBox {
         this.inputManager = new InputManager(this);
         this.hud = new HUD(this);
         this.projector = new Projector(this);
+        this.wallBuilder = new WallBuilder(this);
         
         this._saveTimeout = null;
     }
 
     initialize() {
-        console.log(`${MODULE_ID} | Initializing Core...`);
-        
+        try {
+            // Initialize subsystems
+            this.wallBuilder.init();
+        } catch (err) {
+            console.error(`${MODULE_ID} | WallBuilder Init Failed:`, err);
+        }
+
         // Carregar estado salvo
         this.state.tilt = game.settings.get(MODULE_ID, "savedTilt");
         this.state.rotation = game.settings.get(MODULE_ID, "savedRotation");
@@ -35,10 +42,12 @@ export class PaperBox {
             this.hud.render();
             this.renderEngine.update();
             this.inputManager.activate();
+            this.wallBuilder.activate();
         } else {
             document.body.classList.remove("paperbox-active");
             this.hud.remove();
             this.inputManager.deactivate();
+            this.wallBuilder.deactivate();
         }
     }
 

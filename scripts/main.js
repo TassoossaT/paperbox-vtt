@@ -11,8 +11,6 @@ import { registerPatches } from "./patcher.js";
 let paperbox;
 
 Hooks.once('init', () => {
-    console.log(`${MODULE_ID} | Bootstrapping...`);
-
     registerPatches();
 
     // 1. Registrar Configurações

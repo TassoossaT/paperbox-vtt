@@ -63,11 +63,19 @@ export class HUD {
         `;
 
         // Append to body (default) or Sidebar if requested (future feature)
-        $('body').append(htmlTilt);
-        $('body').append(htmlRot);
+        const $body = window.jQuery ? window.jQuery('body') : document.body;
+        if ($body instanceof jQuery) {
+            $body.append(htmlTilt);
+            $body.append(htmlRot);
+        } else {
+            // Fallback for vanilla JS if jQuery is somehow missing (unlikely in Foundry)
+            const div = document.createElement('div');
+            div.innerHTML = htmlTilt + htmlRot;
+            while (div.firstChild) document.body.appendChild(div.firstChild);
+        }
 
-        this.elementTilt = $('#pb-hud-tilt');
-        this.elementRot = $('#pb-hud-rot');
+        this.elementTilt = window.jQuery ? window.jQuery('#pb-hud-tilt') : document.getElementById('pb-hud-tilt');
+        this.elementRot = window.jQuery ? window.jQuery('#pb-hud-rot') : document.getElementById('pb-hud-rot');
 
         this._generateTicks('pb-ruler-tilt', 0, 85, 15);
         this._generateTicks('pb-ruler-rot', -180, 180, 15);
@@ -79,13 +87,21 @@ export class HUD {
     }
 
     remove() {
-        $('#pb-hud-tilt').remove();
-        $('#pb-hud-rot').remove();
+        if (window.jQuery) {
+            window.jQuery('#pb-hud-tilt').remove();
+            window.jQuery('#pb-hud-rot').remove();
+        } else {
+            document.getElementById('pb-hud-tilt')?.remove();
+            document.getElementById('pb-hud-rot')?.remove();
+        }
         this.elementTilt = null;
         this.elementRot = null;
     }
 
     updateVisuals() {
+        const $ = window.jQuery;
+        if (!$) return;
+
         const state = this.paperbox.state;
 
         // --- TILT (Vertical) ---
@@ -139,6 +155,7 @@ export class HUD {
     }
 
     _generateTicks(containerId, min, max, step) {
+        const $ = window.jQuery;
         const container = $(`#${containerId}`);
         container.empty();
         
@@ -169,6 +186,7 @@ export class HUD {
     }
 
     _activateListeners() {
+        const $ = window.jQuery;
         // Helper for snapping
         const snap = (val, step = 15, threshold = 5) => {
             const remainder = val % step;
@@ -204,6 +222,7 @@ export class HUD {
     }
 
     _toggleLock(type, btn) {
+        const $ = window.jQuery;
         const key = type === 'tilt' ? 'lockedTilt' : 'lockedRotation';
         const newState = !this.paperbox.state[key];
         

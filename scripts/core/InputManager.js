@@ -48,7 +48,9 @@ export class InputManager {
 
         // Tilt (Eixo Y do mouse)
         if (!state.lockedTilt) {
-            const newTilt = Math.clamped(state.tilt - (deltaY * sensitivity), 0, 90);
+            // Math.clamped deprecated in V12 -> Math.clamp
+            const clamp = Math.clamp || Math.clamped;
+            const newTilt = clamp(state.tilt - (deltaY * sensitivity), 0, 90);
             this.paperbox.setState({ tilt: newTilt });
         }
 

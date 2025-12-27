@@ -1,6 +1,11 @@
 export class Projector {
     constructor(paperbox) {
         this.paperbox = paperbox;
+        this._cachedPivot = null;
+        this._lastResize = 0;
+        
+        // Invalidate cache on resize
+        window.addEventListener("resize", () => this._cachedPivot = null);
     }
 
     /**
@@ -13,22 +18,27 @@ export class Projector {
         const board = document.getElementById("board");
         if (!board) return { x: 0, y: 0 };
 
-        // Calculate the global position of the board's center (Pivot Point)
-        // We cannot use getBoundingClientRect() because the element is transformed (rotated).
-        // We traverse the offset chain to find the un-transformed position relative to the document.
-        let el = board;
-        let pivotX = 0;
-        let pivotY = 0;
+        // Cache the pivot calculation to avoid layout thrashing
+        if (!this._cachedPivot) {
+            let el = board;
+            let pivotX = 0;
+            let pivotY = 0;
 
-        while (el) {
-            pivotX += el.offsetLeft;
-            pivotY += el.offsetTop;
-            el = el.offsetParent;
+            while (el) {
+                pivotX += el.offsetLeft;
+                pivotY += el.offsetTop;
+                el = el.offsetParent;
+            }
+
+            // Add half dimensions to find the center
+            pivotX += board.offsetWidth / 2;
+            pivotY += board.offsetHeight / 2;
+            
+            this._cachedPivot = { x: pivotX, y: pivotY };
         }
 
-        // Add half dimensions to find the center
-        pivotX += board.offsetWidth / 2;
-        pivotY += board.offsetHeight / 2;
+        let pivotX = this._cachedPivot.x;
+        let pivotY = this._cachedPivot.y;
 
         // Adjust for viewport scroll to get client coordinates
         pivotX -= window.pageXOffset;

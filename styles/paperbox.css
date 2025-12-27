@@ -7,8 +7,8 @@
     --pb-counter-angle: 0deg;
     --pb-rotation: 0deg;
     --pb-counter-rotation: 0deg;
-    --pb-perspective: 2000px;
-    --pb-scale: 1.5; /* Scale to cover viewport corners when rotating */
+    /* --pb-perspective: 2000px; Removido para garantir projeção ortogonal correta */
+    --pb-scale: 1.5; 
     
     /* User Provided Palette */
     --pb-bg: #434d5a;
@@ -19,7 +19,9 @@
 
 /* 1. Core 3D Engine */
 body.paperbox-active #board {
-    transform: perspective(var(--pb-perspective)) scale(var(--pb-scale)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation));
+    /* transform: perspective(var(--pb-perspective)) scale(var(--pb-scale)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation)); */
+    /* Usando transform sem perspective para manter a proporção isométrica consistente com o cálculo das paredes */
+    transform: scale(var(--pb-scale)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation));
     transform-style: preserve-3d;
     transition: transform 0.1s linear;
 }
@@ -239,4 +241,18 @@ body.paperbox-active .token {
 
 .pb-lock-btn.active {
     color: var(--pb-fill);
+}
+
+/* 3. 3D Walls (Pop-up Card Style) */
+.pb-wall {
+    position: absolute;
+    transform-origin: bottom center;
+    transform: rotateX(-90deg);
+    transform-style: preserve-3d;
+    backface-visibility: visible;
+    pointer-events: none;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    will-change: transform;
+    z-index: 1000; /* Ensure it's above the floor */
 }

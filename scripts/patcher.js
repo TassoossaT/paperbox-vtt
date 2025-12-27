@@ -1,5 +1,5 @@
 export function registerPatches() {
-    console.log("PaperBox VTT | Registering PIXI Patches...");
+
 
     // Patch PIXI EventSystem to correct mouse coordinates
     // This affects clicks, hovers, and all interaction events
