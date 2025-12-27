@@ -2,7 +2,6 @@ export class Projector {
     constructor(paperbox) {
         this.paperbox = paperbox;
         this._cachedPivot = null;
-        this._lastResize = 0;
         
         // Invalidate cache on resize
         window.addEventListener("resize", () => this._cachedPivot = null);
@@ -52,73 +51,46 @@ export class Projector {
 
         // 2. Get State
         const state = this.paperbox.state;
-        const tilt = state.tilt * (Math.PI / 180); // Rotate X
-        const rotation = state.rotation * (Math.PI / 180); // Rotate Z
-        const perspective = 2000; // Fixed in CSS as --pb-perspective
+        const tiltRad = state.tilt * (Math.PI / 180);
+        const rotRad = state.rotation * (Math.PI / 180);
 
-        // 3. Raycasting Logic
-        // Camera is at (0, 0, perspective)
-        const rayOrigin = { x: 0, y: 0, z: perspective };
-        const rayDir = { x: screenX, y: screenY, z: -perspective }; // Vector from Camera to Screen Point
+        // 3. Orthographic Un-Projection
+        // Visual Transform: Scale -> RotateX(tilt) -> RotateZ(rotation)
+        //
+        // In Orthographic projection (no perspective), the Z coordinate is simply dropped.
+        // However, the Tilt (RotateX) compresses the Y axis visually.
+        // y_screen = y_board * cos(tilt)
+        // x_screen = x_board
+        //
+        // So to reverse Tilt:
+        // y_untilted = y_screen / cos(tilt)
+        // x_untilted = x_screen
 
-        // 4. Rotate Ray into Board Space (Inverse Transform)
-        // Correct Inverse Order: 
-        // The CSS is: rotateX(tilt) * rotateZ(rotation)
-        // This means the object is rotated Z first, then X.
-        // To invert, we must Un-Rotate X first, then Un-Rotate Z.
-        // Inverse = InvZ * InvX
+        // Avoid division by zero if tilt is 90 degrees
+        const cosTilt = Math.cos(tiltRad);
+        const safeCosTilt = Math.abs(cosTilt) < 0.001 ? 0.001 : cosTilt;
 
-        // Step A: Un-Rotate X (-tilt)
-        // y' = y cos(-a) - z sin(-a)
-        // z' = y sin(-a) + z cos(-a)
-        const cosT = Math.cos(-tilt);
-        const sinT = Math.sin(-tilt);
+        const x_untilted = screenX;
+        const y_untilted = screenY / safeCosTilt;
 
-        let o1 = {
-            x: rayOrigin.x,
-            y: rayOrigin.y * cosT - rayOrigin.z * sinT,
-            z: rayOrigin.y * sinT + rayOrigin.z * cosT
-        };
-        let d1 = {
-            x: rayDir.x,
-            y: rayDir.y * cosT - rayDir.z * sinT,
-            z: rayDir.y * sinT + rayDir.z * cosT
-        };
-
-        // Step B: Un-Rotate Z (-rotation)
-        // x' = x cos(-a) - y sin(-a)
-        // y' = x sin(-a) + y cos(-a)
-        const cosR = Math.cos(-rotation);
-        const sinR = Math.sin(-rotation);
-
-        let o2 = {
-            x: o1.x * cosR - o1.y * sinR,
-            y: o1.x * sinR + o1.y * cosR,
-            z: o1.z
-        };
-        let d2 = {
-            x: d1.x * cosR - d1.y * sinR,
-            y: d1.x * sinR + d1.y * cosR,
-            z: d1.z
-        };
-
-        // 5. Intersect with Plane z=0
-        if (Math.abs(d2.z) < 0.0001) return { x: screenX, y: screenY }; // Parallel ray?
-
-        const t = -o2.z / d2.z;
+        // 4. Reverse Rotation (RotateZ)
+        // To reverse a rotation of angle A, we rotate by -A.
+        // x_final = x * cos(-A) - y * sin(-A)
+        // y_final = x * sin(-A) + y * cos(-A)
         
-        const hitX = o2.x + t * d2.x;
-        const hitY = o2.y + t * d2.y;
+        const cosRot = Math.cos(-rotRad);
+        const sinRot = Math.sin(-rotRad);
 
-        // Convert back to Canvas Space (Top-Left origin)
-        const finalX = hitX + (board.offsetWidth / 2);
-        const finalY = hitY + (board.offsetHeight / 2);
+        const finalX = x_untilted * cosRot - y_untilted * sinRot;
+        const finalY = x_untilted * sinRot + y_untilted * cosRot;
 
-        // Apply correction based on angle sensitivity
-        // The user reported that the error scales with the angle.
-        // This suggests a slight mismatch in the perspective projection math vs CSS.
-        // We can try to compensate for the "parallax" effect.
+        // 5. Return to Top-Left Coordinates
+        // The calculations were done relative to center (0,0).
+        // We need to add the board's half-width/height back to get coordinates relative to top-left (0,0) of the canvas.
         
-        return { x: finalX, y: finalY };
+        return {
+            x: finalX + (board.offsetWidth / 2),
+            y: finalY + (board.offsetHeight / 2)
+        };
     }
 }
