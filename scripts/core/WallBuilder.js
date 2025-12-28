@@ -300,16 +300,7 @@ export class WallBuilder {
         if (!(html instanceof jQuery)) $html = $(html);
 
         const scrollable = $html.find(".standard-form.scrollable");
-        if (scrollable.length) {
-            scrollable.append(content);
-        } else {
-            const submitBtn = $html.find("button[type='submit']");
-            if (submitBtn.length) {
-                submitBtn.closest(".form-group, footer").before(content);
-            } else {
-                $html.find("form").append(content);
-            }
-        }
+        if (scrollable.length) {scrollable.append(content);}
         
         $html.find(`button.file-picker[data-target="flags.${MODULE_ID}.texture"]`).on("click", (event) => {
             event.preventDefault();
