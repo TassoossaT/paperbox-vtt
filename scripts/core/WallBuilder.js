@@ -1,9 +1,10 @@
 import { MODULE_ID } from "../utils/constants.js";
+import { findIntersectionT, getProjectionVector, getSegmentProjection, compareSegments, getWallGeometry } from "../utils/math.js";
 
 export class WallBuilder {
     constructor(paperbox) {
         this.paperbox = paperbox;
-        this.sprites = new Map(); // Map<WallID, PIXI.Sprite>
+        this.sprites = new Map(); // Map<WallID or subId, PIXI.Sprite>
         this.container = new PIXI.Container();
         this.container.sortableChildren = true;
         this.container.zIndex = 100; 
@@ -41,150 +42,146 @@ export class WallBuilder {
     }
 
     refresh() {
-        // Increment refresh ID to invalidate any pending async creations from previous cycles
         this._refreshId++;
-        
         this.container.removeChildren();
         this.sprites.clear();
 
         if (!canvas.walls) return;
 
-        const walls = canvas.walls.placeables;
+        const walls = canvas.walls.placeables.filter(w => w.document.getFlag(MODULE_ID, "is3D"));
         const currentRefreshId = this._refreshId;
 
-        for (const wall of walls) {
-            if (wall.document.getFlag(MODULE_ID, "is3D")) {
-                this.createWallSprite(wall, currentRefreshId);
+        // 1. Mapa de Interseções: WallID -> Set de pontos de corte (t)
+        const intersectionMap = new Map();
+        walls.forEach(w => intersectionMap.set(w.id, new Set([0, 1])));
+
+        // 2. Cálculo de Interseções entre todas as paredes 3D
+        for (let i = 0; i < walls.length; i++) {
+            for (let j = i + 1; j < walls.length; j++) {
+                const wA = walls[i];
+                const wB = walls[j];
+
+                const t = findIntersectionT(
+                    {x: wA.document.c[0], y: wA.document.c[1]}, {x: wA.document.c[2], y: wA.document.c[3]},
+                    {x: wB.document.c[0], y: wB.document.c[1]}, {x: wB.document.c[2], y: wB.document.c[3]}
+                );
+
+                if (t !== null) {
+                    // Encontramos um cruzamento: marca o ponto t em A e calcula o t correspondente em B
+                    intersectionMap.get(wA.id).add(t);
+                    // Calcula o t para wB também
+                    const tB = findIntersectionT(
+                        {x: wB.document.c[0], y: wB.document.c[1]}, {x: wB.document.c[2], y: wB.document.c[3]},
+                        {x: wA.document.c[0], y: wA.document.c[1]}, {x: wA.document.c[2], y: wA.document.c[3]}
+                    );
+                    if (tB !== null) intersectionMap.get(wB.id).add(tB);
+                }
             }
         }
-        
-        // Force update transforms immediately
+
+        // 3. Criação de Sprites baseada nos segmentos cortados
+        for (const wall of walls) {
+            const tPoints = Array.from(intersectionMap.get(wall.id)).sort((a, b) => a - b);
+            const coords = wall.document.c;
+
+            for (let k = 0; k < tPoints.length - 1; k++) {
+                const tStart = tPoints[k];
+                const tEnd = tPoints[k+1];
+
+                // Calcula as coordenadas do sub-segmento
+                const subCoords = [
+                    coords[0] + tStart * (coords[2] - coords[0]),
+                    coords[1] + tStart * (coords[3] - coords[1]),
+                    coords[0] + tEnd * (coords[2] - coords[0]),
+                    coords[1] + tEnd * (coords[3] - coords[1])
+                ];
+
+                const subId = `${wall.id}-p${k}`;
+                this.createWallSprite(wall, currentRefreshId, subCoords, subId);
+            }
+        }
+
         const state = this.paperbox.state;
         this.updateAllTransforms(state.tilt, state.rotation);
     }
 
-    async createWallSprite(wall, refreshId = null) {
-        // If no refreshId provided, use current (for single creations)
+    // Adicionado customCoords e customId para lidar com os pedaços
+    async createWallSprite(wall, refreshId = null, customCoords = null, customId = null) {
         if (refreshId === null) refreshId = this._refreshId;
-
         const doc = wall.document;
+        const spriteId = customId || doc.id;
         const texturePath = doc.getFlag(MODULE_ID, "texture");
         if (!texturePath) return;
 
         let texture;
         try {
-            // Try Foundry's loader first (handles caching/video)
             if (foundry?.canvas?.TextureLoader?.loader) {
                 texture = await foundry.canvas.TextureLoader.loader.loadTexture(texturePath);
             } else if (typeof loadTexture === "function") {
                 texture = await loadTexture(texturePath);
             }
-        } catch (e) {
-            // Ignore loader errors, fall back below
-        }
-
-        // Fallback
+        } catch (e) {}
         if (!texture || !texture.baseTexture) {
             texture = PIXI.Texture.from(texturePath);
         }
+        if (!texture || refreshId !== this._refreshId) return;
 
-        if (!texture) return;
-
-        // CRITICAL: Check if this operation is still valid
-        // 1. If refresh cycle changed, abort
-        if (refreshId !== this._refreshId) return;
-        
-        // 2. If sprite already exists for this ID (race condition), destroy old one
-        if (this.sprites.has(doc.id)) {
-            const old = this.sprites.get(doc.id);
-            old.destroy();
-            this.sprites.delete(doc.id);
+        if (this.sprites.has(spriteId)) {
+            this.sprites.get(spriteId).destroy();
         }
 
-        let sprite;
-        try {
-            sprite = new PIXI.Sprite(texture);
-        } catch (err) {
-            console.error(`PaperBox | Error creating sprite for ${doc.id}:`, err);
-            return;
-        }
-
-        sprite.anchor.set(0.5, 1); 
+        const sprite = new PIXI.Sprite(texture);
+        sprite.anchor.set(0.5, 1);
         sprite.cullable = false;
-        this.sprites.set(doc.id, sprite);
-        this.container.addChild(sprite);
 
-        // Handle texture loading async
-        const updateFn = () => {
-            // Ensure sprite is still valid and part of our system
-            if (!sprite.destroyed && this.sprites.get(doc.id) === sprite) {
-                this.updateWallSprite(wall, sprite);
-            }
+        // CRITICAL: Guardamos as coordenadas específicas deste pedaço
+        sprite._wallData = {
+            c: customCoords || doc.c,
+            height: doc.getFlag(MODULE_ID, "height") || 100
         };
 
-        if (texture.baseTexture && !texture.baseTexture.valid) {
-            texture.baseTexture.once("loaded", updateFn);
-        } else if (!texture.valid) {
-            texture.once("update", updateFn);
-        }
+        this.sprites.set(spriteId, sprite);
+        this.container.addChild(sprite);
 
-        // Initial update
         this.updateWallSprite(wall, sprite);
     }
 
     updateWallSprite(wall, sprite) {
-        // Just store the wall data on the sprite for easy access during transform update
-        sprite._wallData = {
-            c: wall.document.c,
-            height: wall.document.getFlag(MODULE_ID, "height") || 100
-        };
-        
-        // Trigger a transform update
+
         const state = this.paperbox.state;
         this.updateTransform(sprite, state.tilt, state.rotation);
     }
 
     updateAllTransforms(tilt, rotation) {
+        // 1. Primeiro atualizamos as matrizes e calculamos a profundidade de cada sprite
+        const segments = [];
         for (const sprite of this.sprites.values()) {
             this.updateTransform(sprite, tilt, rotation);
+            segments.push({
+                sprite,
+                proj: getSegmentProjection(sprite._wallData.c, rotation)
+            });
         }
+        segments.sort((A, B) => compareSegments(A.proj, B.proj));
+        segments.forEach((seg, index) => {
+            seg.sprite.zIndex = index;
+        });
     }
 
     updateTransform(sprite, tilt, rotation) {
-        if (!sprite._wallData) return;
-        
-        // Check if texture is valid
-        if (!sprite.texture.valid) return;
+        if (!sprite._wallData || !sprite.texture.valid) return;
+        sprite.visible = true;
 
         const { c: coords, height } = sprite._wallData;
         const p0 = { x: coords[0], y: coords[1] };
         const p1 = { x: coords[2], y: coords[3] };
 
         // 1. Calculate Wall Geometry
-        const dx = p1.x - p0.x;
-        const dy = p1.y - p0.y;
-        const length = Math.sqrt(dx * dx + dy * dy);
-        const wallAngle = Math.atan2(dy, dx);
-        const midX = (p0.x + p1.x) / 2;
-        const midY = (p0.y + p1.y) / 2;
+        const { length, angle: wallAngle, midX, midY } = getWallGeometry(p0, p1);
 
         // 2. Calculate Projection Vector (The "Up" direction on the floor)
-        // Screen Up is -90 degrees relative to North (0 degrees).
-        // If board is rotated by R, Screen Up is rotated by -R.
-        // So UpAngle = -90 - R (in degrees)
-        const rad = Math.PI / 180;
-        const upAngle = (-90 - rotation) * rad;
+        const { x: upX, y: upY } = getProjectionVector(height, tilt, rotation);
         
-        // Projection Factor: How long is the shadow of a unit height?
-        // If we want visual height H on screen, we need floor length L = H / cos(tilt)
-        const safeTilt = Math.max(tilt, 0);
-        const factor = 1 / Math.max(0.01, Math.cos(safeTilt * rad));
-        
-        const upLen = height * factor;
-        
-        const upX = upLen * Math.cos(upAngle);
-        const upY = upLen * Math.sin(upAngle);
-
         // 3. Construct Transformation Matrix
         // We want to map the sprite's local rectangle to the parallelogram defined by WallVector and UpVector.
         // Sprite Local: Width = texture.width, Height = texture.height
@@ -199,32 +196,19 @@ export class WallBuilder {
         // X-axis (Wall Vector)
         const a = Math.cos(wallAngle) * scaleX;
         const b = Math.sin(wallAngle) * scaleX;
-
-        // Y-axis (Up Vector) - Note: Local Y is negative (up), so we map -1 to UpVector
-        // But sprite height is positive. Anchor is at bottom (y=1*H). Top is at y=0?
-        // No, anchor (0.5, 1).
-        // Local coords: Bottom=(0, 0 relative to anchor), Top=(0, -Height).
-        // We want Top to be at (UpX, UpY).
-        // So -Height * c = UpX => c = -UpX / Height
-        // -Height * d = UpY => d = -UpY / Height
-        // But we are using the texture's native height for the matrix calculation if we don't pre-scale.
-        // Let's use the 'height' value we want.
-        
         const c = -upX / sprite.texture.height;
         const d = -upY / sprite.texture.height;
 
-        // Position
-        const tx = midX;
-        const ty = midY;
-
-        // Apply Matrix
-        const matrix = new PIXI.Matrix(a, b, c, d, tx, ty);
-        sprite.transform.setFromMatrix(matrix);
+        sprite.transform.setFromMatrix(new PIXI.Matrix(a, b, c, d, midX, midY));
         
-        // Ensure visibility properties are set
-        sprite.visible = true;
-        sprite.alpha = 1;
-        sprite.zIndex = 1000;
+        // // 2. ORDENAÇÃO POR EXTREMOS TOTAIS
+        // // Calculamos a profundidade dos 4 cantos do volume da parede
+        // const d0 = getProjectedDepth(p0.x, p0.y, 0, tilt, rotation);
+        // const d1 = getProjectedDepth(p1.x, p1.y, 0, tilt, rotation);
+        // const t0 = getProjectedDepth(p0.x, p0.y, height, tilt, rotation);
+        // const t1 = getProjectedDepth(p1.x, p1.y, height, tilt, rotation);
+        // const maxDepth = Math.max(d0, d1, t0, t1);
+        // sprite.zIndex = maxDepth;
     }
 
     _onCreateWall(doc) {
@@ -318,3 +302,4 @@ export class WallBuilder {
         if (typeof app.setPosition === "function") app.setPosition({ height: "auto" });
     }
 }
+

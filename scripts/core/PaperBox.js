@@ -6,28 +6,30 @@ import { WallBuilder } from "./WallBuilder.js";
 
 export class PaperBox {
     constructor() {
+        this._saveTimeout = null;
         this.state = { ...DEFAULTS };
-        
-        // Sub-sistemas
+        // Sub-sistemas só serão inicializados após carregar o estado salvo
+        this.renderEngine = null;
+        this.inputManager = null;
+        this.hud = null;
+        this.wallBuilder = null;
+    }
+
+    initialize() {
+        // Carregar estado salvo antes de inicializar subsistemas
+        this.state.tilt = game.settings.get(MODULE_ID, "savedTilt") ?? DEFAULTS.tilt;
+        this.state.rotation = game.settings.get(MODULE_ID, "savedRotation") ?? DEFAULTS.rotation;
+
+        // Agora inicialize os subsistemas
         this.renderEngine = new RenderEngine(this);
         this.inputManager = new InputManager(this);
         this.hud = new HUD(this);
         this.wallBuilder = new WallBuilder(this);
-        
-        this._saveTimeout = null;
-    }
-
-    initialize() {
         try {
-            // Initialize subsystems
             this.wallBuilder.init();
         } catch (err) {
             console.error(`${MODULE_ID} | WallBuilder Init Failed:`, err);
         }
-
-        // Carregar estado salvo
-        this.state.tilt = game.settings.get(MODULE_ID, "savedTilt");
-        this.state.rotation = game.settings.get(MODULE_ID, "savedRotation");
 
         // Verificar se está ativo
         const enabled = game.settings.get(MODULE_ID, "enabled");
@@ -67,8 +69,8 @@ export class PaperBox {
     _saveSettings() {
         clearTimeout(this._saveTimeout);
         this._saveTimeout = setTimeout(() => {
-            game.settings.set(MODULE_ID, "savedTilt", this.state.tilt);
-            game.settings.set(MODULE_ID, "savedRotation", this.state.rotation);
+            game.settings.set(MODULE_ID, "savedTilt", Number(this.state.tilt));
+            game.settings.set(MODULE_ID, "savedRotation", Number(this.state.rotation));
         }, 1000);
     }
 }
