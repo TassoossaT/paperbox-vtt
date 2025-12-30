@@ -9,6 +9,7 @@
     --pb-counter-rotation: 0deg;
     /* --pb-perspective: 2000px; Removido para garantir projeção ortogonal correta */
     --pb-scale: 1.5; 
+    --pb-scale-y: 1; /* Default scaleY */
     
     /* User Provided Palette */
     --pb-bg: #434d5a;
@@ -19,19 +20,39 @@
 
 /* 1. Core 3D Engine */
 body.paperbox-active #board {
-    /* transform: perspective(var(--pb-perspective)) scale(var(--pb-scale)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation)); */
-    /* Usando transform sem perspective para manter a proporção isométrica consistente com o cálculo das paredes */
-    transform: scale(var(--pb-scale)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation));
-    transform-style: preserve-3d;
-    transition: transform 0.1s linear;
+    /* Transform moved to PIXI RenderEngine for better 3D support */
+    /* transform: scale(var(--pb-scale)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation)); */
+    /* transform-style: preserve-3d; */
+    /* transition: transform 0.1s linear; */
 }
 
+/* 
+   HUD Transformation Logic
+   We now rotate the entire #hud container in RenderEngine.js.
+   No need to transform children individually.
+*/
+/*
+body.paperbox-active #hud > * {
+    transform-origin: center center;
+    transform: rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation)) !important;
+    will-change: transform;
+}
+*/
+
+
 body.paperbox-active .token {
-    transform: rotateZ(var(--pb-counter-rotation)) rotateX(var(--pb-counter-angle)) scale(1.4);
-    transform-origin: bottom center;
-    filter: drop-shadow(0px 10px 5px rgba(0,0,0,0.6));
-    transition: transform 0.1s linear;
-    backface-visibility: hidden;
+    /* Tokens are now handled by PIXI transform inheritance, but we might need to counter-rotate if we want them upright? */
+    /* Actually, if we rotate the stage, tokens rotate with it. */
+    /* If we want tokens to "stand up" (billboard), we need to counter-rotate them. */
+    /* But tokens are PIXI objects, not DOM elements (usually). */
+    /* Wait, if tokens are DOM elements (unlikely in v10+), this CSS applies. */
+    /* If tokens are PIXI, this CSS does nothing for them. */
+    /* Assuming tokens are PIXI, we need to handle them in JS if we want billboarding. */
+    /* But the existing CSS had a rule for .token. */
+    /* If .token exists in DOM, it might be for HUD or tooltips? */
+    /* Or maybe this module supports DOM tokens? */
+    /* Let's keep the CSS for .token but comment it out or adjust it if needed. */
+    /* transform: rotateZ(var(--pb-counter-rotation)) rotateX(var(--pb-counter-angle)) scale(1.4); */
 }
 
 /* 2. HUD Container */

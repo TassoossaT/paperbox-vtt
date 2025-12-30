@@ -1,33 +1,21 @@
 export function registerPatches() {
-
-
-    // Patch PIXI EventSystem to correct mouse coordinates
-    // This affects clicks, hovers, and all interaction events
-    if (typeof PIXI !== "undefined" && PIXI.EventSystem) {
-        const originalMap = PIXI.EventSystem.prototype.mapPositionToPoint;
-        
-        PIXI.EventSystem.prototype.mapPositionToPoint = function(point, x, y) {
-            // Only apply if PaperBox is active and initialized
-            if (document.body.classList.contains("paperbox-active") && game.paperbox?.projector) {
-                const projected = game.paperbox.projector.getProjectedCoordinates(x, y);
-                
-                // projected contains {x, y} in Canvas Pixel Space (relative to top-left of canvas element)
-                // We need to map this to the Stage World Space (accounting for Pan/Zoom)
-                // Usually this.root is the stage.
-                
-                if (this.root && this.root.worldTransform) {
-                    this.root.worldTransform.applyInverse(projected, point);
-                } else {
-                    // Fallback if root is not defined (unlikely)
-                    point.x = projected.x;
-                    point.y = projected.y;
-                }
-                return;
+    // 1. Patch PIXI getLocalPosition
+    // This fixes tools (Ruler, Dragging) that call event.data.getLocalPosition(canvas.stage) directly.
+    // We redirect requests for 'canvas.stage' coordinates to 'rotationContainer' coordinates when active.
+    const patchPixiMethod = (proto, methodName) => {
+        if (!proto || !proto[methodName]) return;
+        const original = proto[methodName];
+        proto[methodName] = function(displayObject, point, globalPos) {
+            if (game.paperbox?.renderEngine?.rotationContainer && displayObject === canvas.stage) {
+                displayObject = game.paperbox.renderEngine.rotationContainer;
             }
-            
-            return originalMap.call(this, point, x, y);
+            return original.call(this, displayObject, point, globalPos);
         };
-    } else {
-        console.warn("PaperBox VTT | PIXI.EventSystem not found. Mouse correction may fail.");
+    };
+    
+    if (typeof PIXI !== "undefined") {
+        if (PIXI.InteractionData) patchPixiMethod(PIXI.InteractionData.prototype, "getLocalPosition");
+        if (PIXI.FederatedEvent) patchPixiMethod(PIXI.FederatedEvent.prototype, "getLocalPosition");
+        if (PIXI.FederatedPointerEvent) patchPixiMethod(PIXI.FederatedPointerEvent.prototype, "getLocalPosition");
     }
 }
