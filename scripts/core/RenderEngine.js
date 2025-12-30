@@ -32,12 +32,9 @@ export class RenderEngine {
         for (const child of children) {
             this.rotationContainer.addChild(child);
         }
-        
         this.tiltContainer.addChild(this.rotationContainer);
+        canvas.stage.mask = null;
         canvas.stage.addChild(this.tiltContainer);
-
-        // 3. Create Board Border
-        this._createBoardBorder();
 
         // 4. Start Loop
         canvas.app.ticker.add(this._onTick, this, PIXI.UPDATE_PRIORITY.LOW);
@@ -83,27 +80,6 @@ export class RenderEngine {
     update() {
         // Called when state changes manually (e.g. settings)
         this._updateVisuals();  
-    }
-
-    _createBoardBorder() {
-        if (this.border) {
-            this.border.destroy();
-            this.border = null;
-        }
-
-        // Create a Graphics object to draw the board bounds
-        this.border = new PIXI.Graphics();
-        this.border.name = "PaperBoxBoardBorder";
-        
-        // Get Scene Dimensions
-        const rect = canvas.dimensions.sceneRect;
-        
-        // Style: White border, 4px thick, slightly transparent
-        this.border.lineStyle(4, 0xFFFFFF, 0.5);
-        this.border.drawRect(rect.x, rect.y, rect.width, rect.height);
-        
-        // Add to rotation container so it rotates with the map
-        this.rotationContainer.addChild(this.border);
     }
 
     _onTick() {
@@ -167,19 +143,23 @@ export class RenderEngine {
         if (this.paperbox.wallBuilder?.updateAllTransforms) {
             this.paperbox.wallBuilder.updateAllTransforms(state.tilt, state.rotation);
         }
+
+        if (canvas.ready && canvas.hud) {
+            canvas.hud.align();
+        }
     }
 
     _syncHudTransform() {
         const hud = document.getElementById("hud");
         if (!hud) return;
 
+        // Apenas atualizamos as variáveis. O CSS !important cuida do resto.
+        // Aplica a transformação visual diretamente ao HUD
         const state = this.paperbox.state;
         const scale = canvas.stage.scale.x;
-
-        // Apenas atualizamos as variáveis. O CSS !important cuida do resto.
-            // Aplica a transformação visual diretamente ao HUD
-            hud.style.transform = `scale(${scale}) rotateX(${state.tilt}deg) rotateZ(${state.rotation}deg)`;
+        hud.style.transform = `scale(${scale}) rotateX(${state.tilt}deg) rotateZ(${state.rotation}deg)`;
     }
+
 
     /**
      * Calculates the screen coordinates for a given world point.

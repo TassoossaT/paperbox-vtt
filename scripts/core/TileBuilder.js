@@ -33,8 +33,8 @@ export class TileBuilder {
         // 2. Calculate Elevation Offset (Same logic as WallBuilder)
         const rad = Math.PI / 180;
         const upAngle = (-90 - state.rotation) * rad;
-        const safeTilt = Math.min(Math.max(state.tilt, 0), 85);
-        const factor = 1 / Math.cos(safeTilt * rad);
+        const safeTilt = Math.max(state.tilt, 0);
+        const factor = 1 / Math.max(0.01, Math.cos(safeTilt * rad));
         
         const elevLen = elevation * factor;
         const elevX = elevLen * Math.cos(upAngle);

@@ -15,7 +15,9 @@ export class WallBuilder {
             if (!canvas.primary) return;
             // Avoid adding multiple times
             if (this.container.parent) return;
-            
+            if (canvas.primary.mask) canvas.primary.mask = null;
+            if (canvas.primary.sprite?.mask) canvas.primary.sprite.mask = null;
+            this.container.cullable = false;
             canvas.primary.addChild(this.container);
             this.refresh();
         };
@@ -83,7 +85,7 @@ export class WallBuilder {
 
         // Fallback
         if (!texture || !texture.baseTexture) {
-             texture = PIXI.Texture.from(texturePath);
+            texture = PIXI.Texture.from(texturePath);
         }
 
         if (!texture) return;
@@ -108,7 +110,7 @@ export class WallBuilder {
         }
 
         sprite.anchor.set(0.5, 1); 
-        
+        sprite.cullable = false;
         this.sprites.set(doc.id, sprite);
         this.container.addChild(sprite);
 
@@ -123,7 +125,7 @@ export class WallBuilder {
         if (texture.baseTexture && !texture.baseTexture.valid) {
             texture.baseTexture.once("loaded", updateFn);
         } else if (!texture.valid) {
-             texture.once("update", updateFn);
+            texture.once("update", updateFn);
         }
 
         // Initial update
@@ -175,9 +177,8 @@ export class WallBuilder {
         
         // Projection Factor: How long is the shadow of a unit height?
         // If we want visual height H on screen, we need floor length L = H / cos(tilt)
-        // Clamp tilt to avoid division by zero (max 85 degrees)
-        const safeTilt = Math.min(Math.max(tilt, 0), 85);
-        const factor = 1 / Math.cos(safeTilt * rad);
+        const safeTilt = Math.max(tilt, 0);
+        const factor = 1 / Math.max(0.01, Math.cos(safeTilt * rad));
         
         const upLen = height * factor;
         
