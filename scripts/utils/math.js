@@ -62,8 +62,10 @@ export function getWallSubSegment(coords, tStart, tEnd) {
 export function getProjectionVector(height, tilt, rotation) {
     const rad = Math.PI / 180;
     const upAngle = (-90 - rotation) * rad;
-    const factor = 1 / Math.max(0.01, Math.cos(tilt * rad));
-    const upLen = height * factor;
+    // Corrigido: compensar o scale.y global (cos(tilt)), usando tan(tilt)
+    // upLen = height * tan(tilt) = height * sin(tilt) / cos(tilt)
+    const cosTilt = Math.max(0.01, Math.cos(tilt * rad));
+    const upLen = height * Math.sin(tilt * rad) / cosTilt;
     return {
         x: upLen * Math.cos(upAngle),
         y: upLen * Math.sin(upAngle)

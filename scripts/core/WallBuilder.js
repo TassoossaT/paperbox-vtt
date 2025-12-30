@@ -13,13 +13,25 @@ export class WallBuilder {
 
     init() {
         const onCanvasReady = () => {
+            // Só adiciona se canvas.primary existir
             if (!canvas.primary) return;
-            // Avoid adding multiple times
-            if (this.container.parent) return;
+            // Se já existe, destrói o container antigo
+            if (this.container && this.container.parent) {
+                this.container.parent.removeChild(this.container);
+            }
+            // Sempre cria um novo container e novo mapa de sprites
+            this.container = new PIXI.Container();
+            this.container.sortableChildren = true;
+            this.container.zIndex = 100;
+            this.container.cullable = false;
+            this.sprites = new Map();
             if (canvas.primary.mask) canvas.primary.mask = null;
             if (canvas.primary.sprite?.mask) canvas.primary.sprite.mask = null;
-            this.container.cullable = false;
-            canvas.primary.addChild(this.container);
+            try {
+                canvas.primary.addChild(this.container);
+            } catch (e) {
+                return;
+            }
             this.refresh();
         };
 
@@ -165,7 +177,7 @@ export class WallBuilder {
     }
 
     updateTransform(sprite, tilt, rotation) {
-        if (!sprite._wallData || !sprite.texture.valid) return;
+        if (!sprite._wallData || !sprite.texture || !sprite.texture.valid) return;
         sprite.visible = true;
 
         const { c: coords, height, textureOffset = 0 } = sprite._wallData;
