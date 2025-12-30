@@ -2,7 +2,6 @@ import { DEFAULTS, MODULE_ID } from "../utils/constants.js";
 import { RenderEngine } from "./RenderEngine.js";
 import { InputManager } from "./InputManager.js";
 import { HUD } from "../ui/HUD.js";
-import { Projector } from "./Projector.js";
 import { WallBuilder } from "./WallBuilder.js";
 
 export class PaperBox {
@@ -13,7 +12,6 @@ export class PaperBox {
         this.renderEngine = new RenderEngine(this);
         this.inputManager = new InputManager(this);
         this.hud = new HUD(this);
-        this.projector = new Projector(this);
         this.wallBuilder = new WallBuilder(this);
         
         this._saveTimeout = null;
@@ -40,12 +38,13 @@ export class PaperBox {
         if (enabled) {
             document.body.classList.add("paperbox-active");
             this.hud.render();
-            this.renderEngine.update();
+            this.renderEngine.activate();
             this.inputManager.activate();
             this.wallBuilder.activate();
         } else {
             document.body.classList.remove("paperbox-active");
             this.hud.remove();
+            this.renderEngine.deactivate();
             this.inputManager.deactivate();
             this.wallBuilder.deactivate();
         }
@@ -54,7 +53,12 @@ export class PaperBox {
     setState(updates) {
         // Atualiza o estado local
         this.state = { ...this.state, ...updates };
-        
+
+        // Atualiza HUD se existir
+        if (this.hud && typeof this.hud.updateVisuals === 'function') {
+            this.hud.updateVisuals();
+        }
+
         // Propaga mudanças
         this.renderEngine.update();
         this._saveSettings();

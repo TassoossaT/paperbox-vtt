@@ -43,7 +43,7 @@ export class InputManager {
 
         const deltaX = event.clientX - this.lastMouseX;
         const deltaY = event.clientY - this.lastMouseY;
-        const sensitivity = 0.5;
+        const sensitivity = 0.2;
         const state = this.paperbox.state;
 
         // Tilt (Eixo Y do mouse)
