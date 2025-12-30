@@ -3,14 +3,17 @@ export class HUD {
         this.paperbox = paperbox;
         this.elementTilt = null;
         this.elementRot = null;
+        // Centralized config
+        this.TILT_RANGE = { min: 0, max: 90, step: 1 };
+        this.ROT_RANGE = { min: -180, max: 180, step: 1 };
+        this.SNAP_STEP = 1;
+        this.SNAP_THRESHOLD = 5;
     }
 
     render() {
         if (document.getElementById("pb-hud-tilt")) return;
 
         const state = this.paperbox.state;
-
-        // Load saved positions
         const posTilt = game.settings.get('paperbox-vtt', 'hudPosTilt') || { top: '20%', right: '20px' };
         const posRot = game.settings.get('paperbox-vtt', 'hudPosRot') || { bottom: '20px', left: '50%' };
 
@@ -21,7 +24,6 @@ export class HUD {
             if (pos.bottom) s += `bottom: ${pos.bottom}; `;
             if (pos.left) s += `left: ${pos.left}; `;
             if (pos.right) s += `right: ${pos.right}; `;
-            // Ensure transform is handled for rot if it was centered originally
             if (pos.left === '50%' && !pos.left.includes('px')) s += 'transform: translateX(-50%); ';
             else s += 'transform: none; ';
             return s;
@@ -34,7 +36,7 @@ export class HUD {
                     <div class="pb-value-display" id="pb-val-tilt"><span>${Math.round(state.tilt)}</span></div>
                     <div class="pb-ruler" id="pb-ruler-tilt"></div>
                     <input type="range" class="pb-slider" id="pb-slider-tilt" 
-                           min="0" max="85" value="${state.tilt}" step="1">
+                        min="${this.TILT_RANGE.min}" max="${this.TILT_RANGE.max}" value="${state.tilt}" step="${this.TILT_RANGE.step}">
                 </div>
                 <div class="pb-angle-visual" id="pb-vis-tilt">
                     <div class="pb-vis-needle"></div>
@@ -57,7 +59,7 @@ export class HUD {
                     <div class="pb-value-display" id="pb-val-rot"><span>${Math.round(normRot)}</span></div>
                     <div class="pb-ruler" id="pb-ruler-rot"></div>
                     <input type="range" class="pb-slider" id="pb-slider-rot" 
-                           min="-180" max="180" value="${Math.round(normRot)}" step="1">
+                           min="${this.ROT_RANGE.min}" max="${this.ROT_RANGE.max}" value="${Math.round(normRot)}" step="${this.ROT_RANGE.step}">
                 </div>
             </div>
         `;
@@ -99,59 +101,38 @@ export class HUD {
     }
 
     updateVisuals() {
-        const $ = window.jQuery;
-        if (!$) return;
-
+        // Prefer vanilla JS for robustness
         const state = this.paperbox.state;
 
         // --- TILT (Vertical) ---
-        // Range 0 to 85
-        const ratioTilt = state.tilt / 85;
-        const pctTilt = ratioTilt * 100;
-        
-        $('#pb-slider-tilt').css('--pb-val-pct', `${pctTilt}%`);
-        
-        // Sync Text with Thumb Center
-        // Thumb is 20px. Track is full height.
-        // The thumb center moves from 10px (min) to Height-10px (max).
-        // Formula: Center = 10 + (Height - 20) * ratio
-        // In percentage of track (assuming track is container):
-        // We can use calc in CSS, or calculate pixels here. 
-        // Let's use the calc formula for precision: calc(Ratio% + (10 - Ratio*20)px)
-        const offsetTilt = 10 - (ratioTilt * 20);
-
-        $('#pb-val-tilt')
-            .find('span').text(Math.round(state.tilt)).end()
-            .css('bottom', `calc(${pctTilt}% + ${offsetTilt}px)`);
-        
-        // Visual Indicator for Tilt (Side view arc)
-        $('#pb-vis-tilt .pb-vis-needle').css('transform', `rotate(${-state.tilt}deg)`);
+        const tiltSlider = document.getElementById('pb-slider-tilt');
+        const tiltVal = document.getElementById('pb-val-tilt');
+        const tiltNeedle = document.querySelector('#pb-vis-tilt .pb-vis-needle');
+        if (tiltSlider && tiltVal && tiltNeedle) {
+            const ratioTilt = state.tilt / this.TILT_RANGE.max;
+            const pctTilt = ratioTilt * 100;
+            tiltSlider.style.setProperty('--pb-val-pct', `${pctTilt}%`);
+            tiltVal.querySelector('span').textContent = Math.round(state.tilt);
+            tiltVal.style.bottom = `calc(${pctTilt}% + ${10 - (ratioTilt * 20)}px)`;
+            tiltNeedle.style.transform = `rotate(${-state.tilt}deg)`;
+            if (!tiltSlider.matches(':active')) tiltSlider.value = state.tilt;
+        }
 
         // --- ROTATION (Horizontal) ---
         let normRot = ((state.rotation % 360) + 360) % 360;
         if (normRot > 180) normRot -= 360;
-        
-        // Range -180 to 180 (Total 360)
-        const ratioRot = (normRot + 180) / 360;
-        const pctRot = ratioRot * 100;
-
-        $('#pb-slider-rot').css('--pb-val-pct', `${pctRot}%`);
-        
-        const offsetRot = 10 - (ratioRot * 20);
-
-        $('#pb-val-rot')
-            .find('span').text(Math.round(normRot)).end()
-            .css('left', `calc(${pctRot}% + ${offsetRot}px)`);
-
-        // Visual Indicator for Rotation (Compass)
-        $('#pb-vis-rot .pb-vis-needle').css('transform', `rotate(${normRot}deg)`);
-
-        // Sliders (sync)
-        const sTilt = $('#pb-slider-tilt');
-        const sRot = $('#pb-slider-rot');
-
-        if (sTilt.length && !sTilt.is(':active')) sTilt.val(state.tilt);
-        if (sRot.length && !sRot.is(':active')) sRot.val(normRot);
+        const rotSlider = document.getElementById('pb-slider-rot');
+        const rotVal = document.getElementById('pb-val-rot');
+        const rotNeedle = document.querySelector('#pb-vis-rot .pb-vis-needle');
+        if (rotSlider && rotVal && rotNeedle) {
+            const ratioRot = (normRot + 180) / (this.ROT_RANGE.max - this.ROT_RANGE.min);
+            const pctRot = ratioRot * 100;
+            rotSlider.style.setProperty('--pb-val-pct', `${pctRot}%`);
+            rotVal.querySelector('span').textContent = Math.round(normRot);
+            rotVal.style.left = `calc(${pctRot}% + ${10 - (ratioRot * 20)}px)`;
+            rotNeedle.style.transform = `rotate(${normRot}deg)`;
+            if (!rotSlider.matches(':active')) rotSlider.value = normRot;
+        }
     }
 
     _generateTicks(containerId, min, max, step) {
@@ -186,9 +167,23 @@ export class HUD {
     }
 
     _activateListeners() {
-        const $ = window.jQuery;
+        // Função auxiliar para lidar com scroll do mouse nos sliders
+        const handleSliderWheel = (slider, stateKey, range, lockKey, step) => {
+            slider.addEventListener('wheel', (e) => {
+                if (this.paperbox.state[lockKey]) return;
+                e.preventDefault();
+                let val = parseInt(slider.value);
+                // deltaY > 0 = scroll para baixo (diminuir), < 0 = para cima (aumentar)
+                val += (e.deltaY > 0 ? -step : step);
+                // Snap
+                val = snap(val, step, this.SNAP_THRESHOLD);
+                val = Math.max(range.min, Math.min(range.max, val));
+                this.paperbox.setState({ [stateKey]: val });
+                this.updateVisuals();
+            });
+        };
         // Helper for snapping
-        const snap = (val, step = 15, threshold = 5) => {
+        const snap = (val, step = this.SNAP_STEP, threshold = this.SNAP_THRESHOLD) => {
             const remainder = val % step;
             if (Math.abs(remainder) < threshold) return val - remainder;
             if (Math.abs(remainder) > step - threshold) return val + (step * Math.sign(val)) - remainder;
@@ -196,29 +191,34 @@ export class HUD {
         };
 
         // Sliders
-        $('#pb-slider-tilt').on('input', (e) => {
-            if (this.paperbox.state.lockedTilt) return;
-            let val = parseInt(e.target.value);
-            val = snap(val);
-            // Update visual if snapped
-            if (val !== parseInt(e.target.value)) {
-                // We don't force the slider value immediately to avoid "fighting" the user, 
-                // but we update the state which updates the visual.
-                // Actually, for snapping to feel "magnetic", we might want to update the state to the snapped value.
-            }
-            this.paperbox.setState({ tilt: val });
-        });
-
-        $('#pb-slider-rot').on('input', (e) => {
-            if (this.paperbox.state.lockedRotation) return;
-            let val = parseInt(e.target.value);
-            val = snap(val);
-            this.paperbox.setState({ rotation: val });
-        });
+        const tiltSlider = document.getElementById('pb-slider-tilt');
+        if (tiltSlider) {
+            tiltSlider.addEventListener('input', (e) => {
+                if (this.paperbox.state.lockedTilt) return;
+                let val = parseInt(e.target.value);
+                val = snap(val, this.TILT_RANGE.step, this.SNAP_THRESHOLD);
+                this.paperbox.setState({ tilt: val });
+                this.updateVisuals();
+            });
+            handleSliderWheel(tiltSlider, 'tilt', this.TILT_RANGE, 'lockedTilt', this.TILT_RANGE.step);
+        }
+        const rotSlider = document.getElementById('pb-slider-rot');
+        if (rotSlider) {
+            rotSlider.addEventListener('input', (e) => {
+                if (this.paperbox.state.lockedRotation) return;
+                let val = parseInt(e.target.value);
+                val = snap(val, this.ROT_RANGE.step, this.SNAP_THRESHOLD);
+                this.paperbox.setState({ rotation: val });
+                this.updateVisuals();
+            });
+            handleSliderWheel(rotSlider, 'rotation', this.ROT_RANGE, 'lockedRotation', this.ROT_RANGE.step);
+        }
 
         // Locks
-        $('#pb-lock-tilt').on('click', (e) => this._toggleLock('tilt', e.currentTarget));
-        $('#pb-lock-rot').on('click', (e) => this._toggleLock('rotation', e.currentTarget));
+        const tiltLock = document.getElementById('pb-lock-tilt');
+        if (tiltLock) tiltLock.addEventListener('click', (e) => this._toggleLock('tilt', e.currentTarget));
+        const rotLock = document.getElementById('pb-lock-rot');
+        if (rotLock) rotLock.addEventListener('click', (e) => this._toggleLock('rotation', e.currentTarget));
     }
 
     _toggleLock(type, btn) {

@@ -1,166 +1,143 @@
-﻿/* =========================================
-   PaperBox VTT - Native Slider Style
-   ========================================= */
+﻿/* PaperBox VTT - HUD & 3D Walls - Otimizado */
 
 :root {
     --pb-angle: 0deg;
     --pb-counter-angle: 0deg;
     --pb-rotation: 0deg;
     --pb-counter-rotation: 0deg;
-    /* --pb-perspective: 2000px; Removido para garantir projeção ortogonal correta */
-    --pb-scale: 1.5; 
-    --pb-scale-y: 1; /* Default scaleY */
-    
-    /* User Provided Palette */
+    --pb-scale: 1.5;
+    --pb-scale-y: 1;
     --pb-bg: #434d5a;
-    --pb-track: #e4dfd3;      /* $color-background */
-    --pb-fill: #fe9996;       /* $color-highlight */
+    --pb-track: #e4dfd3;
+    --pb-fill: #fe9996;
     --pb-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    --pb-radius: 8px;
+    --pb-panel-padding: 1.5em;
+    --pb-panel-width: 80px;
+    --pb-panel-height: 300px;
+    --pb-panel-width-rot: 400px;
+    --pb-panel-height-rot: 100px;
+    --pb-slider-thumb-size: 20px;
+    --pb-slider-track-height: 8px;
+    --pb-tick-major: rgba(255,255,255,0.5);
+    --pb-tick-minor: rgba(255,255,255,0.2);
+    --pb-transition: 0.2s cubic-bezier(.4,0,.2,1);
 }
 
-/* 1. Core 3D Engine */
-body.paperbox-active #board {
-    /* Transform moved to PIXI RenderEngine for better 3D support */
-    /* transform: scale(var(--pb-scale)) rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation)); */
-    /* transform-style: preserve-3d; */
-    /* transition: transform 0.1s linear; */
-}
+/* Board transform é feito via PIXI, não precisa CSS */
 
-/* 
-   HUD Transformation Logic
-   We now rotate the entire #hud container in RenderEngine.js.
-   No need to transform children individually.
-*/
-/*
-body.paperbox-active #hud > * {
-    transform-origin: center center;
-    transform: rotateX(var(--pb-angle)) rotateZ(var(--pb-rotation)) !important;
-    will-change: transform;
-}
-*/
+/* HUD transform é feito via JS, não precisa CSS */
 
 
-body.paperbox-active .token {
-    /* Tokens are now handled by PIXI transform inheritance, but we might need to counter-rotate if we want them upright? */
-    /* Actually, if we rotate the stage, tokens rotate with it. */
-    /* If we want tokens to "stand up" (billboard), we need to counter-rotate them. */
-    /* But tokens are PIXI objects, not DOM elements (usually). */
-    /* Wait, if tokens are DOM elements (unlikely in v10+), this CSS applies. */
-    /* If tokens are PIXI, this CSS does nothing for them. */
-    /* Assuming tokens are PIXI, we need to handle them in JS if we want billboarding. */
-    /* But the existing CSS had a rule for .token. */
-    /* If .token exists in DOM, it might be for HUD or tooltips? */
-    /* Or maybe this module supports DOM tokens? */
-    /* Let's keep the CSS for .token but comment it out or adjust it if needed. */
-    /* transform: rotateZ(var(--pb-counter-rotation)) rotateX(var(--pb-counter-angle)) scale(1.4); */
-}
+/* Tokens são PIXI, não DOM. Nenhuma regra CSS aplicada. */
 
 /* 2. HUD Container */
+/* HUD Panel - Responsivo e com transição */
 .pb-hud-panel {
     position: fixed;
-    /* background: var(--pb-bg); Removed background */
-    /* border-radius: 8px; */
-    /* box-shadow: var(--pb-shadow); Removed shadow */
+    background: transparent;
+    border-radius: var(--pb-radius);
+    box-shadow: var(--pb-shadow);
     z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
+    padding: var(--pb-panel-padding);
+    transition: box-shadow var(--pb-transition), background var(--pb-transition);
 }
 
 #pb-hud-tilt {
     top: 20%;
     right: 20px;
-    height: 300px;
-    width: 80px;
+    height: var(--pb-panel-height);
+    width: var(--pb-panel-width);
     flex-direction: column;
+    background: transparent;
+    opacity: 1;
 }
-
 #pb-hud-rot {
     bottom: 20px;
     left: 50%;
     transform: translateX(-50%);
-    width: 400px;
-    height: 100px;
+    width: var(--pb-panel-width-rot);
+    height: var(--pb-panel-height-rot);
     flex-direction: row;
+    background: transparent;
+    opacity: 1;
 }
 
 /* Lock Button */
+/* Lock Button - com transição */
 .pb-lock-btn {
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 1em;
     color: var(--pb-track);
-    width: 30px;
-    height: 30px;
+    width: 2em;
+    height: 2em;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: color 0.2s;
-    margin: 5px;
+    transition: color var(--pb-transition);
+    margin: 0.3em;
 }
 .pb-lock-btn:hover { color: #fff; }
 .pb-lock-btn.active { color: var(--pb-fill); }
 
 /* 3. Native Slider Styling (Simplified) */
+/* Slider Container */
 .pb-slider-container {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
 }
-
 #pb-cont-tilt {
     height: 200px;
     width: 40px;
 }
-
 #pb-cont-rot {
     width: 300px;
     height: 40px;
 }
 
 /* Slider Input */
+/* Slider Input - responsivo e com variáveis */
 .pb-slider {
-    -webkit-appearance: none; /* Override default look */
+    -webkit-appearance: none;
     appearance: none;
-    background: transparent; /* No track background */
+    background: transparent;
     position: absolute;
     margin: 0;
     z-index: 2;
+    transition: box-shadow var(--pb-transition);
 }
-
-/* Track - Make it invisible or very subtle if "sem background" applies to track too */
 .pb-slider::-webkit-slider-runnable-track {
     width: 100%;
-    height: 8px;
-    background: rgba(0, 0, 0, 0.2); /* Subtle track */
+    height: var(--pb-slider-track-height);
+    background: rgba(0, 0, 0, 0.2);
     border-radius: 4px;
     cursor: pointer;
 }
-
-/* Thumb - The "Box" */
 .pb-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
     appearance: none;
-    height: 20px;
-    width: 20px;
-    background: transparent; /* Transparent center */
-    border: 2px solid var(--pb-fill); /* Colored border */
+    height: var(--pb-slider-thumb-size);
+    width: var(--pb-slider-thumb-size);
+    background: transparent;
+    border: 2px solid var(--pb-fill);
     border-radius: 2px;
     cursor: grab;
-    margin-top: -6px; /* Center on track */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    margin-top: -6px;
+    transition: border-color var(--pb-transition);
 }
-
 #pb-slider-tilt {
-    width: 200px; /* Rotated, so width becomes height */
+    width: 200px;
     height: 20px;
     transform: rotate(-90deg);
     transform-origin: center;
 }
-
 #pb-slider-rot {
     width: 100%;
     height: 20px;
@@ -173,98 +150,70 @@ body.paperbox-active .token {
     pointer-events: none;
 }
 
+/* Ticks - visualização dos sliders */
 .pb-tick {
     position: absolute;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--pb-tick-minor);
     border-radius: 1px;
+    transition: background var(--pb-transition);
 }
-
-/* Tilt Ticks (Vertical) */
 #pb-ruler-tilt .pb-tick {
     left: 50%;
-    width: 6px; /* Smaller width */
+    width: 6px;
     height: 1px;
     transform: translateX(-50%);
 }
 #pb-ruler-tilt .pb-tick.major {
     width: 12px;
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--pb-tick-major);
 }
-
-/* Rot Ticks (Horizontal) */
 #pb-ruler-rot .pb-tick {
     top: 50%;
-    height: 6px; /* Smaller height */
+    height: 6px;
     width: 1px;
     transform: translateY(-50%);
 }
 #pb-ruler-rot .pb-tick.major {
     height: 12px;
-    background: rgba(255, 255, 255, 0.5);
+    background: var(--pb-tick-major);
 }
 
 .pb-angle-visual {
     display: none; 
 }
 
+/* Valor do slider - sempre centralizado e responsivo */
 .pb-value-display {
     position: absolute;
     pointer-events: none;
     z-index: 10;
-    width: 20px; /* Match thumb size */
-    height: 20px; /* Match thumb size */
+    width: var(--pb-slider-thumb-size);
+    height: var(--pb-slider-thumb-size);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 0.9em;
     font-weight: bold;
-    color: var(--pb-fill); /* Match border color */
-    text-shadow: 0 0 2px rgba(0,0,0,0.8); /* Dark shadow for contrast */
-}
-
-/* Specific positioning for Tilt Value */
-#pb-val-tilt {
-    left: 50%;
-    transform: translate(-50%, 50%); /* Center on thumb */
-}
-
-/* Specific positioning for Rot Value */
-#pb-val-rot {
-    top: 50%;
-    transform: translate(-50%, -50%); /* Center on thumb */
-}
-
-#pb-cont-rot .pb-value-display span {
-    transform: none; 
-}
-
-/* Pequeno ajuste para o texto ficar legível */
-.pb-value-display {
+    color: var(--pb-fill);
+    text-shadow: 0 0 2px rgba(0,0,0,0.8);
     text-align: center;
     line-height: 1;
+    transition: color var(--pb-transition);
+}
+#pb-val-tilt {
+    left: 50%;
+    transform: translate(-50%, 50%);
+}
+#pb-val-rot {
+    top: 50%;
+    transform: translate(-50%, -50%);
 }
 
 /* 6. Botões */
-.pb-lock-btn {
-    background: none;
-    border: none;
-    color: var(--pb-track);
-    cursor: pointer;
-    font-size: 16px;
-    padding: 8px;
-    transition: color 0.2s;
-    z-index: 10;
-}
-
-.pb-lock-btn:hover {
-    color: var(--pb-fill);
-}
-
-.pb-lock-btn.active {
-    color: var(--pb-fill);
-}
+/* Botão de lock já está acima, removido duplicidade */
 
 /* 3. 3D Walls (Pop-up Card Style) */
+/* 3D Walls (Pop-up Card Style) */
 .pb-wall {
     position: absolute;
     transform-origin: bottom center;
@@ -275,5 +224,6 @@ body.paperbox-active .token {
     background-size: 100% 100%;
     background-repeat: no-repeat;
     will-change: transform;
-    z-index: 1000; /* Ensure it's above the floor */
+    z-index: 1000;
 }
+

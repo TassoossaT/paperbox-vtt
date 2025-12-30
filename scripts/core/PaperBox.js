@@ -53,7 +53,12 @@ export class PaperBox {
     setState(updates) {
         // Atualiza o estado local
         this.state = { ...this.state, ...updates };
-        
+
+        // Atualiza HUD se existir
+        if (this.hud && typeof this.hud.updateVisuals === 'function') {
+            this.hud.updateVisuals();
+        }
+
         // Propaga mudanças
         this.renderEngine.update();
         this._saveSettings();
