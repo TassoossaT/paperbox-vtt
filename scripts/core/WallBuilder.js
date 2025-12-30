@@ -1,5 +1,5 @@
 import { MODULE_ID } from "../utils/constants.js";
-import { findIntersectionT, getProjectionVector, getSegmentProjection, compareSegments, getWallGeometry } from "../utils/math.js";
+import { findIntersectionT, getProjectionVector, getSegmentProjection, compareSegments, getWallGeometry, getWallLength, getWallSubSegment } from "../utils/math.js";
 
 export class WallBuilder {
     constructor(paperbox) {
@@ -41,8 +41,12 @@ export class WallBuilder {
         this.container.visible = false;
     }
 
-    refresh() {
+    async refresh() {
         this._refreshId++;
+        // Destroi todos os sprites antigos antes de limpar
+        for (const sprite of this.sprites.values()) {
+            sprite.destroy();
+        }
         this.container.removeChildren();
         this.sprites.clear();
 
@@ -60,16 +64,12 @@ export class WallBuilder {
             for (let j = i + 1; j < walls.length; j++) {
                 const wA = walls[i];
                 const wB = walls[j];
-
                 const t = findIntersectionT(
                     {x: wA.document.c[0], y: wA.document.c[1]}, {x: wA.document.c[2], y: wA.document.c[3]},
                     {x: wB.document.c[0], y: wB.document.c[1]}, {x: wB.document.c[2], y: wB.document.c[3]}
                 );
-
                 if (t !== null) {
-                    // Encontramos um cruzamento: marca o ponto t em A e calcula o t correspondente em B
                     intersectionMap.get(wA.id).add(t);
-                    // Calcula o t para wB também
                     const tB = findIntersectionT(
                         {x: wB.document.c[0], y: wB.document.c[1]}, {x: wB.document.c[2], y: wB.document.c[3]},
                         {x: wA.document.c[0], y: wA.document.c[1]}, {x: wA.document.c[2], y: wA.document.c[3]}
@@ -80,33 +80,28 @@ export class WallBuilder {
         }
 
         // 3. Criação de Sprites baseada nos segmentos cortados
+        const promises = [];
         for (const wall of walls) {
             const tPoints = Array.from(intersectionMap.get(wall.id)).sort((a, b) => a - b);
             const coords = wall.document.c;
-
+            const fullLength = getWallLength(coords);
             for (let k = 0; k < tPoints.length - 1; k++) {
                 const tStart = tPoints[k];
                 const tEnd = tPoints[k+1];
-
-                // Calcula as coordenadas do sub-segmento
-                const subCoords = [
-                    coords[0] + tStart * (coords[2] - coords[0]),
-                    coords[1] + tStart * (coords[3] - coords[1]),
-                    coords[0] + tEnd * (coords[2] - coords[0]),
-                    coords[1] + tEnd * (coords[3] - coords[1])
-                ];
-
+                const subCoords = getWallSubSegment(coords, tStart, tEnd);
+                const offset = tStart * fullLength;
                 const subId = `${wall.id}-p${k}`;
-                this.createWallSprite(wall, currentRefreshId, subCoords, subId);
+                const promise = this.createWallSprite(wall, currentRefreshId, subCoords, subId, offset);
+                promises.push(promise);
             }
         }
-
+        await Promise.all(promises);
         const state = this.paperbox.state;
         this.updateAllTransforms(state.tilt, state.rotation);
     }
 
     // Adicionado customCoords e customId para lidar com os pedaços
-    async createWallSprite(wall, refreshId = null, customCoords = null, customId = null) {
+    async createWallSprite(wall, refreshId = null, customCoords = null, customId = null, offset = 0) {
         if (refreshId === null) refreshId = this._refreshId;
         const doc = wall.document;
         const spriteId = customId || doc.id;
@@ -130,19 +125,19 @@ export class WallBuilder {
             this.sprites.get(spriteId).destroy();
         }
 
-        const sprite = new PIXI.Sprite(texture);
+        const sprite = new PIXI.TilingSprite(texture, 1, texture.height);
+        
         sprite.anchor.set(0.5, 1);
         sprite.cullable = false;
 
-        // CRITICAL: Guardamos as coordenadas específicas deste pedaço
         sprite._wallData = {
             c: customCoords || doc.c,
-            height: doc.getFlag(MODULE_ID, "height") || 100
+            height: doc.getFlag(MODULE_ID, "height") || 100,
+            textureOffset: offset // Guardamos o deslocamento para o updateTransform
         };
 
         this.sprites.set(spriteId, sprite);
         this.container.addChild(sprite);
-
         this.updateWallSprite(wall, sprite);
     }
 
@@ -166,49 +161,33 @@ export class WallBuilder {
         segments.forEach((seg, index) => {
             seg.sprite.zIndex = index;
         });
+        // this.container.sortChildren();
     }
 
     updateTransform(sprite, tilt, rotation) {
         if (!sprite._wallData || !sprite.texture.valid) return;
         sprite.visible = true;
 
-        const { c: coords, height } = sprite._wallData;
+        const { c: coords, height, textureOffset = 0 } = sprite._wallData;
         const p0 = { x: coords[0], y: coords[1] };
         const p1 = { x: coords[2], y: coords[3] };
 
         // 1. Calculate Wall Geometry
         const { length, angle: wallAngle, midX, midY } = getWallGeometry(p0, p1);
+        sprite.width = length;
+        sprite.height = sprite.texture.height;
+        sprite.tilePosition.x = -textureOffset;
 
-        // 2. Calculate Projection Vector (The "Up" direction on the floor)
         const { x: upX, y: upY } = getProjectionVector(height, tilt, rotation);
-        
-        // 3. Construct Transformation Matrix
-        // We want to map the sprite's local rectangle to the parallelogram defined by WallVector and UpVector.
-        // Sprite Local: Width = texture.width, Height = texture.height
-        // We want Sprite Width to map to Wall Length.
-        // We want Sprite Height to map to UpLen.
-        
-        // Scale factors to normalize texture dimensions
-        const scaleX = length / sprite.texture.width;
-        const scaleY = 1 / sprite.texture.height; // We handle height via UpVector directly
 
         // Matrix components
         // X-axis (Wall Vector)
-        const a = Math.cos(wallAngle) * scaleX;
-        const b = Math.sin(wallAngle) * scaleX;
-        const c = -upX / sprite.texture.height;
-        const d = -upY / sprite.texture.height;
+        const a = Math.cos(wallAngle);
+        const b = Math.sin(wallAngle);
+        const c = -upX / sprite.height;
+        const d = -upY / sprite.height;
 
         sprite.transform.setFromMatrix(new PIXI.Matrix(a, b, c, d, midX, midY));
-        
-        // // 2. ORDENAÇÃO POR EXTREMOS TOTAIS
-        // // Calculamos a profundidade dos 4 cantos do volume da parede
-        // const d0 = getProjectedDepth(p0.x, p0.y, 0, tilt, rotation);
-        // const d1 = getProjectedDepth(p1.x, p1.y, 0, tilt, rotation);
-        // const t0 = getProjectedDepth(p0.x, p0.y, height, tilt, rotation);
-        // const t1 = getProjectedDepth(p1.x, p1.y, height, tilt, rotation);
-        // const maxDepth = Math.max(d0, d1, t0, t1);
-        // sprite.zIndex = maxDepth;
     }
 
     _onCreateWall(doc) {
@@ -216,23 +195,17 @@ export class WallBuilder {
     }
 
     _onUpdateWall(doc) {
-        // Ensure we have the latest data from the document
-        const sprite = this.sprites.get(doc.id);
-        
-        if (sprite) {
-            if (!doc.getFlag(MODULE_ID, "is3D")) {
+        // Remove all sprites related to this wall (main and subIds)
+        const wallId = doc.id;
+        const toRemove = [];
+        for (const [id, sprite] of this.sprites.entries()) {
+            if (id === wallId || id.startsWith(wallId + "-")) {
                 sprite.destroy();
-                this.sprites.delete(doc.id);
-            } else {
-                // Pass the document directly to ensure we use the latest coordinates
-                this.updateWallSprite({ document: doc }, sprite);
+                toRemove.push(id);
             }
-        } else if (doc.getFlag(MODULE_ID, "is3D")) {
-            // If it's a new 3D wall (or was toggled to 3D), create it
-            // We need a mock object structure if doc.object is not available, but usually it is.
-            // createWallSprite expects { document: doc } structure.
-            this.createWallSprite({ document: doc });
         }
+        for (const id of toRemove) this.sprites.delete(id);
+        if (doc.getFlag(MODULE_ID, "is3D")) {this.refresh();}
     }
 
     _onDeleteWall(doc) {
