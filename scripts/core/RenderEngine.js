@@ -138,12 +138,15 @@ export class RenderEngine {
         if (this.rotationContainer) {
             this.rotationContainer.rotation = state.rotation * rad;
         }
-
-        // Notifica o WallBuilder (importante para iluminação e colisão)
-        if (this.paperbox.wallBuilder?.updateAllTransforms) {
-            this.paperbox.wallBuilder.updateAllTransforms(state.tilt, state.rotation);
+        if (this.paperbox.orchestrator?.depthUpdate) {
+            this.paperbox.orchestrator.depthUpdate();
         }
-
+        // if (this.paperbox.wallBuilder?.updateAllTransforms) {
+        //     this.paperbox.wallBuilder.updateAllTransforms(state.tilt, state.rotation);
+        // }
+        // if (this.paperbox.doorBuilder?.updateAllTransforms) {
+        //     this.paperbox.doorBuilder.updateAllTransforms(state.tilt, state.rotation);
+        // }
         if (canvas.ready && canvas.hud) {
             canvas.hud.align();
         }

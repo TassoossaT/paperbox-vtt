@@ -1,43 +1,20 @@
-import { MODULE_ID } from "../utils/constants.js";
-import { findIntersectionT, getProjectionVector, getSegmentProjection, compareSegments, getWallGeometry, getWallLength, getWallSubSegment } from "../utils/math.js";
+import { MODULE_ID } from "../../utils/constants.js";
+import { calculateWallTransform, getWallLength, getWallSubSegment } from "../../utils/math.js";
 
 export class WallBuilder {
-    constructor(paperbox) {
+    /**
+     * @param {any} paperbox
+     * @param {"wall"|"door"} type - Define se é builder de parede ou porta
+     */
+    constructor(paperbox, container) {
+        this.type = "wall"; // "wall" ou "door"
         this.paperbox = paperbox;
         this.sprites = new Map(); // Map<WallID or subId, PIXI.Sprite>
-        this.container = new PIXI.Container();
-        this.container.sortableChildren = true;
-        this.container.zIndex = 100; 
+        this.container = container; // container global compartilhado
         this._refreshId = 0; // To track active refresh cycles
     }
 
     init() {
-        const onCanvasReady = () => {
-            // Só adiciona se canvas.primary existir
-            if (!canvas.primary) return;
-            // Se já existe, destrói o container antigo
-            if (this.container && this.container.parent) {
-                this.container.parent.removeChild(this.container);
-            }
-            // Sempre cria um novo container e novo mapa de sprites
-            this.container = new PIXI.Container();
-            this.container.sortableChildren = true;
-            this.container.zIndex = 100;
-            this.container.cullable = false;
-            this.sprites = new Map();
-            if (canvas.primary.mask) canvas.primary.mask = null;
-            if (canvas.primary.sprite?.mask) canvas.primary.sprite.mask = null;
-            try {
-                canvas.primary.addChild(this.container);
-            } catch (e) {
-                return;
-            }
-            this.refresh();
-        };
-
-        Hooks.on("canvasReady", onCanvasReady);
-        if (canvas.ready) onCanvasReady();
-
         Hooks.on("renderWallConfig", this._onRenderWallConfig.bind(this));
         Hooks.on("createWall", this._onCreateWall.bind(this));
         Hooks.on("updateWall", this._onUpdateWall.bind(this));
@@ -45,72 +22,51 @@ export class WallBuilder {
     }
 
     activate() {
-        this.container.visible = true;
+        if (this.container) this.container.visible = true;
         this.refresh();
     }
 
     deactivate() {
-        this.container.visible = false;
+        if (this.container) this.container.visible = false;
     }
 
     async refresh() {
         this._refreshId++;
-        // Destroi todos os sprites antigos antes de limpar
-        for (const sprite of this.sprites.values()) {
-            sprite.destroy();
-        }
-        this.container.removeChildren();
-        this.sprites.clear();
-
+        this._clearSprites();
         if (!canvas.walls) return;
 
-        const walls = canvas.walls.placeables.filter(w => w.document.getFlag(MODULE_ID, "is3D"));
-        const currentRefreshId = this._refreshId;
-
-        // 1. Mapa de Interseções: WallID -> Set de pontos de corte (t)
-        const intersectionMap = new Map();
-        walls.forEach(w => intersectionMap.set(w.id, new Set([0, 1])));
-
-        // 2. Cálculo de Interseções entre todas as paredes 3D
-        for (let i = 0; i < walls.length; i++) {
-            for (let j = i + 1; j < walls.length; j++) {
-                const wA = walls[i];
-                const wB = walls[j];
-                const t = findIntersectionT(
-                    {x: wA.document.c[0], y: wA.document.c[1]}, {x: wA.document.c[2], y: wA.document.c[3]},
-                    {x: wB.document.c[0], y: wB.document.c[1]}, {x: wB.document.c[2], y: wB.document.c[3]}
-                );
-                if (t !== null) {
-                    intersectionMap.get(wA.id).add(t);
-                    const tB = findIntersectionT(
-                        {x: wB.document.c[0], y: wB.document.c[1]}, {x: wB.document.c[2], y: wB.document.c[3]},
-                        {x: wA.document.c[0], y: wA.document.c[1]}, {x: wA.document.c[2], y: wA.document.c[3]}
-                    );
-                    if (tB !== null) intersectionMap.get(wB.id).add(tB);
-                }
-            }
+        if (this.paperbox?.orchestrator?.globalIntersections) {
+            this.paperbox.orchestrator.globalIntersections();
         }
 
-        // 3. Criação de Sprites baseada nos segmentos cortados
+        const walls = canvas.walls.placeables.filter(w => 
+            this.type === "wall" ? (w.document.door == 0) : (w.document.door > 0) && 
+            w.document.getFlag(MODULE_ID, "is3D")
+        );
+
         const promises = [];
         for (const wall of walls) {
-            const tPoints = Array.from(intersectionMap.get(wall.id)).sort((a, b) => a - b);
+            const tPoints = Array.from(this.paperbox.orchestrator.intersectionMap.get(wall.id) || [0, 1]).sort((a, b) => a - b);
+
             const coords = wall.document.c;
             const fullLength = getWallLength(coords);
+
             for (let k = 0; k < tPoints.length - 1; k++) {
-                const tStart = tPoints[k];
-                const tEnd = tPoints[k+1];
-                const subCoords = getWallSubSegment(coords, tStart, tEnd);
-                const offset = tStart * fullLength;
+                const subCoords = getWallSubSegment(coords, tPoints[k], tPoints[k+1]);
+                const offset = tPoints[k] * fullLength;
                 const subId = `${wall.id}-p${k}`;
-                const promise = this.createWallSprite(wall, currentRefreshId, subCoords, subId, offset);
+
+                const promise = this.createWallSprite(wall, this._refreshId, subCoords, subId, offset).then(() => {
+                    const s = this.sprites.get(subId);
+                    if (s) s._segmentIndex = k;
+                });
                 promises.push(promise);
             }
         }
         await Promise.all(promises);
-        const state = this.paperbox.state;
-        this.updateAllTransforms(state.tilt, state.rotation);
+        await this.paperbox.orchestrator.depthUpdate();
     }
+
 
     // Adicionado customCoords e customId para lidar com os pedaços
     async createWallSprite(wall, refreshId = null, customCoords = null, customId = null, offset = 0) {
@@ -149,57 +105,63 @@ export class WallBuilder {
         };
 
         this.sprites.set(spriteId, sprite);
-        this.container.addChild(sprite);
-        this.updateWallSprite(wall, sprite);
+        if (this.container) this.container.addChild(sprite);
+        this.updateWallSprite(sprite);
     }
 
-    updateWallSprite(wall, sprite) {
-
+    updateWallSprite(sprite, pivot = null) {
         const state = this.paperbox.state;
-        this.updateTransform(sprite, state.tilt, state.rotation);
+        // Usa pivot salvo no sprite, se não for passado
+        const usePivot = pivot || sprite._doorPivot || null;
+        this.updateTransform(sprite, state.tilt, state.rotation, usePivot);
     }
 
-    updateAllTransforms(tilt, rotation) {
-        // 1. Primeiro atualizamos as matrizes e calculamos a profundidade de cada sprite
-        const segments = [];
-        for (const sprite of this.sprites.values()) {
-            this.updateTransform(sprite, tilt, rotation);
-            segments.push({
-                sprite,
-                proj: getSegmentProjection(sprite._wallData.c, rotation)
-            });
-        }
-        segments.sort((A, B) => compareSegments(A.proj, B.proj));
-        segments.forEach((seg, index) => {
-            seg.sprite.zIndex = index;
-        });
-        // this.container.sortChildren();
-    }
+    // updateAllTransforms(tilt, rotation) {
+    //     // 1. Primeiro atualizamos as matrizes e calculamos a profundidade de cada sprite
+    //     const segments = [];
+    //     for (const sprite of this.sprites.values()) {
+    //         this.updateTransform(sprite, tilt, rotation);
+    //         segments.push({
+    //             sprite,
+    //             proj: getSegmentProjection(sprite._wallData.c, rotation)
+    //         });
+    //     }
+    //     segments.sort((A, B) => compareSegments(A.proj, B.proj));
+    //     segments.forEach((seg, index) => {
+    //         seg.sprite.zIndex = index;
+    //     });
+    //     // this.container.sortChildren();
+    // }
 
-    updateTransform(sprite, tilt, rotation) {
-        if (!sprite._wallData || !sprite.texture || !sprite.texture.valid) return;
+    async updateTransform(sprite, tilt, rotation) {
+        if (!sprite._wallData || !sprite.texture?.valid) return null; // Importante retornar null se falhar
         sprite.visible = true;
 
         const { c: coords, height, textureOffset = 0 } = sprite._wallData;
-        const p0 = { x: coords[0], y: coords[1] };
-        const p1 = { x: coords[2], y: coords[3] };
 
-        // 1. Calculate Wall Geometry
-        const { length, angle: wallAngle, midX, midY } = getWallGeometry(p0, p1);
-        sprite.width = length;
-        sprite.height = sprite.texture.height;
+        const transform = calculateWallTransform({
+            coords,
+            height,
+            tilt,
+            rotation,
+            doorAngle: sprite._doorAngle,
+            doorPivot: sprite._doorPivot,
+            slide: sprite._doorSlide,
+            lift: sprite._doorLift
+        });
+
+        sprite.width = transform.length;
+        sprite.height = height;
         sprite.tilePosition.x = -textureOffset;
 
-        const { x: upX, y: upY } = getProjectionVector(height, tilt, rotation);
+        const { a, b, c, d, tx, ty } = transform.matrixParams;
+        sprite.transform.setFromMatrix(new PIXI.Matrix(a, b, c, d, tx, ty));
 
-        // Matrix components
-        // X-axis (Wall Vector)
-        const a = Math.cos(wallAngle);
-        const b = Math.sin(wallAngle);
-        const c = -upX / sprite.height;
-        const d = -upY / sprite.height;
-
-        sprite.transform.setFromMatrix(new PIXI.Matrix(a, b, c, d, midX, midY));
+        // CORREÇÃO AQUI: Retorne as coordenadas vivas (pos-transformação)
+        return transform.liveCoords; 
+    }
+    _getInitialCutPoints(wall) {
+        return new Set([0, 1]);
     }
 
     _onCreateWall(doc) {
@@ -232,6 +194,10 @@ export class WallBuilder {
         const doc = app.document || app.object?.document || app.object;
         if (!doc) return;
 
+        // Only inject for the correct type: wall (door==0) or door (door>0)
+        const isDoor = doc.door > 0;
+        if ((this.type === "wall" && isDoor) || (this.type === "door" && !isDoor)) return;
+
         const getFlag = (key, field) => {
             try {
                 if (typeof doc.getFlag === "function") return doc.getFlag(key, field);
@@ -242,12 +208,13 @@ export class WallBuilder {
         const is3D = getFlag(MODULE_ID, "is3D") || false;
         const texture = getFlag(MODULE_ID, "texture") || "";
         const height = getFlag(MODULE_ID, "height") || 100;
-        
+        // Label dinâmico
+        const label = this.type === "door" ? "Enable 3D Door" : "Enable 3D Wall";
         const content = `
             <fieldset>
                 <legend>PaperBox 3D</legend>
                 <div class="form-group">
-                    <label>Enable 3D Wall</label>
+                    <label>${label}</label>
                     <input type="checkbox" name="flags.${MODULE_ID}.is3D" ${is3D ? "checked" : ""}>
                 </div>
                 <div class="form-group">
@@ -285,6 +252,16 @@ export class WallBuilder {
         });
         
         if (typeof app.setPosition === "function") app.setPosition({ height: "auto" });
+    }
+
+    _clearSprites() {
+        for (const sprite of this.sprites.values()) sprite.destroy();
+        if (this.container) {
+            for (const sprite of this.sprites.values()) {
+                this.container.removeChild(sprite);
+            }
+        }
+        this.sprites.clear();
     }
 }
 

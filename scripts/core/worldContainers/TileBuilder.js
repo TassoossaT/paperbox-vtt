@@ -1,4 +1,4 @@
-import { MODULE_ID } from "../utils/constants.js";
+import { MODULE_ID } from "../../utils/constants.js";
 
 export class TileBuilder {
     constructor(paperbox) {

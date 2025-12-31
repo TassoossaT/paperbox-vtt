@@ -1,7 +1,68 @@
+
+
 // ===================
 // Geometry Utilities
 // ===================
+/**
+ * Calcula a transformação 2.5D suportando Swing, Slide e Ascend/Descend.
+ */
+/**
+ * Calcula a matriz de transformação 2.5D suportando Swing, Slide e Ascend/Descend.
+ */
+export function calculateWallTransform(data) {
+    const { coords, height, tilt, rotation, doorAngle = 0, doorPivot = null, slide = 0, lift = 0 } = data;
 
+    // 1. Pontos iniciais
+    let p0 = { x: coords[0], y: coords[1] };
+    let p1 = { x: coords[2], y: coords[3] };
+
+    // 2. Aplica Swing/Swivel (Rotação)
+    if (doorAngle !== 0 && doorPivot) {
+        p0 = rotatePointAround(p0, doorPivot, doorAngle);
+        p1 = rotatePointAround(p1, doorPivot, doorAngle);
+    }
+
+    const dx = p1.x - p0.x;
+    const dy = p1.y - p0.y;
+    const length = Math.sqrt(dx * dx + dy * dy);
+    const wallAngle = Math.atan2(dy, dx);
+
+    // 3. Aplica Slide (Correr)
+    // Importante: Precisamos mover P0 e P1 para que o Sort funcione!
+    if (slide !== 0) {
+        const moveX = Math.cos(wallAngle) * (length * slide);
+        const moveY = Math.sin(wallAngle) * (length * slide);
+        
+        p0.x += moveX;
+        p0.y += moveY;
+        p1.x += moveX;
+        p1.y += moveY;
+    }
+
+    // O centro do sprite será o novo ponto médio após rotação e slide
+    const midX = (p0.x + p1.x) / 2;
+    const midY = (p0.y + p1.y) / 2;
+
+    // 4. Aplica Projeção Vertical (Tilt/Rotation da Câmera)
+    const { x: upX, y: upY } = getProjectionVector(height, tilt, rotation);
+    
+    // TX e TY são a posição final na tela, considerando o "Lift" (elevação)
+    const tx = midX + (upX * lift);
+    const ty = midY + (upY * lift);
+
+    return {
+        matrixParams: {
+            a: Math.cos(wallAngle),
+            b: Math.sin(wallAngle),
+            c: -upX / height,
+            d: -upY / height,
+            tx, 
+            ty
+        },
+        length,
+        liveCoords: [p0.x, p0.y, p1.x, p1.y]
+    };
+}
 /**
  * Returns the basic geometry of a segment (wall): length, angle, and midpoint.
  * @param {Object} p0 - Start point {x, y}
@@ -47,7 +108,23 @@ export function getWallSubSegment(coords, tStart, tEnd) {
         coords[1] + tEnd * dy
     ];
 }
-
+/**
+ * Rotaciona um ponto em torno de um pivot por um ângulo (rad).
+ * @param {{x:number, y:number}} point
+ * @param {{x:number, y:number}} pivot
+ * @param {number} angleRad
+ * @returns {{x:number, y:number}}
+ */
+export function rotatePointAround(point, pivot, angleRad) {
+    const dx = point.x - pivot.x;
+    const dy = point.y - pivot.y;
+    const cosA = Math.cos(angleRad);
+    const sinA = Math.sin(angleRad);
+    return {
+        x: pivot.x + dx * cosA - dy * sinA,
+        y: pivot.y + dx * sinA + dy * cosA
+    };
+}
 // ===================
 // Projection Utilities
 // ===================
@@ -156,28 +233,53 @@ export function compareSegments(a, b) {
     const overlapMin = Math.max(a.minU, b.minU);
     const overlapMax = Math.min(a.maxU, b.maxU);
 
-    if (overlapMax - overlapMin > 0.01) {
+    if (overlapMax - overlapMin > 1e-6) {
         // 2. If the walls occupy the same column of pixels, calculate the exact Z at that point
         const midU = (overlapMin + overlapMax) / 2;
 
         const getZatU = (p, u) => {
-            const du = p.u1 - p.u0;
-            // If the wall is perfectly in profile (vertical on the screen)
-            if (Math.abs(du) < 0.1) return (p.z0 + p.z1) / 2;
-            // Linear interpolation of depth based on U position
-            const t = (u - p.u0) / du;
-            return p.z0 + t * (p.z1 - p.z0);
+            const du = p.maxU - p.minU;
+            if (Math.abs(du) < 1e-6) {
+                return (p.z0 + p.z1) / 2;
+            }
+            const t = (u - p.minU) / du;
+            const zMin = p.u0 < p.u1 ? p.z0 : p.z1;
+            const zMax = p.u0 < p.u1 ? p.z1 : p.z0;
+            return zMin + t * (zMax - zMin);
         };
+        const zA1 = getZatU(a, overlapMin + 0.25 * (overlapMax - overlapMin));
+        const zA2 = getZatU(a, overlapMin + 0.75 * (overlapMax - overlapMin));
 
-        const zA = getZatU(a, midU);
-        const zB = getZatU(b, midU);
+        const zB1 = getZatU(b, overlapMin + 0.25 * (overlapMax - overlapMin));
+        const zB2 = getZatU(b, overlapMin + 0.75 * (overlapMax - overlapMin));
 
-        // If there is a depth difference, it defines the order
-        if (Math.abs(zA - zB) > 0.01) {
-            return zA - zB; 
-        }
+        return (zA1 + zA2) - (zB1 + zB2);
     }
 
     // 3. Stable tie-breaker for walls that do not visually overlap
-    return (a.minU + a.maxU) - (b.minU + b.maxU);
+    return ((a.z0 + a.z1) - (b.z0 + b.z1));
+}
+/**
+ * Projeta um Token para o espaço de profundidade.
+ * Tratamos tokens como um "segmento minúsculo" ou um ponto central com raio.
+ */
+export function getTokenProjection(token, rotation) {
+    const rad = Math.PI / 180;
+    const cosR = Math.cos(rotation * rad);
+    const sinR = Math.sin(rotation * rad);
+
+    // Centro do token
+    const x = token.x + (token.w / 2);
+    const y = token.y + (token.h / 2);
+
+    // Profundidade Z no sistema rotacionado
+    const z = x * sinR + y * cosR;
+    const u = x * cosR - y * sinR;
+
+    return {
+        u0: u - 1, u1: u + 1, // Pequena margem horizontal
+        z0: z, z1: z,         // Profundidade plana
+        minU: u - 1, maxU: u + 1,
+        isPoint: true         // Flag para o comparador
+    };
 }
