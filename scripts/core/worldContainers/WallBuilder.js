@@ -1,4 +1,5 @@
 import { MODULE_ID } from "../../utils/constants.js";
+import { getWall3DConfigHTML } from "../../utils/dom.js";
 import { calculateWallTransform, getWallLength, getWallSubSegment } from "../../utils/math.js";
 
 export class WallBuilder {
@@ -94,7 +95,6 @@ export class WallBuilder {
         }
 
         const sprite = new PIXI.TilingSprite(texture, 1, texture.height);
-        
         sprite.anchor.set(0.5, 1);
         sprite.cullable = false;
 
@@ -107,6 +107,10 @@ export class WallBuilder {
         this.sprites.set(spriteId, sprite);
         if (this.container) this.container.addChild(sprite);
         this.updateWallSprite(sprite);
+        if (this.type === "door") {
+            const ds = typeof doc.ds === "number" ? doc.ds : (doc.getFlag(MODULE_ID, "ds") ?? 0);
+            this.animateDoor(doc, ds === 1);
+        }
     }
 
     updateWallSprite(sprite, pivot = null) {
@@ -115,23 +119,6 @@ export class WallBuilder {
         const usePivot = pivot || sprite._doorPivot || null;
         this.updateTransform(sprite, state.tilt, state.rotation, usePivot);
     }
-
-    // updateAllTransforms(tilt, rotation) {
-    //     // 1. Primeiro atualizamos as matrizes e calculamos a profundidade de cada sprite
-    //     const segments = [];
-    //     for (const sprite of this.sprites.values()) {
-    //         this.updateTransform(sprite, tilt, rotation);
-    //         segments.push({
-    //             sprite,
-    //             proj: getSegmentProjection(sprite._wallData.c, rotation)
-    //         });
-    //     }
-    //     segments.sort((A, B) => compareSegments(A.proj, B.proj));
-    //     segments.forEach((seg, index) => {
-    //         seg.sprite.zIndex = index;
-    //     });
-    //     // this.container.sortChildren();
-    // }
 
     async updateTransform(sprite, tilt, rotation) {
         if (!sprite._wallData || !sprite.texture?.valid) return null; // Importante retornar null se falhar
@@ -210,28 +197,7 @@ export class WallBuilder {
         const height = getFlag(MODULE_ID, "height") || 100;
         // Label dinâmico
         const label = this.type === "door" ? "Enable 3D Door" : "Enable 3D Wall";
-        const content = `
-            <fieldset>
-                <legend>PaperBox 3D</legend>
-                <div class="form-group">
-                    <label>${label}</label>
-                    <input type="checkbox" name="flags.${MODULE_ID}.is3D" ${is3D ? "checked" : ""}>
-                </div>
-                <div class="form-group">
-                    <label>Texture</label>
-                    <div class="form-fields">
-                        <button type="button" class="file-picker" data-type="image" data-target="flags.${MODULE_ID}.texture" title="Browse Files" tabindex="-1">
-                            <i class="fas fa-file-import fa-fw"></i>
-                        </button>
-                        <input class="image" type="text" name="flags.${MODULE_ID}.texture" placeholder="path/to/image.png" value="${texture}">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>Height (px)</label>
-                    <input type="number" name="flags.${MODULE_ID}.height" value="${height}">
-                </div>
-            </fieldset>
-        `;
+        const content = getWall3DConfigHTML({ label, is3D, texture, height, moduleId: MODULE_ID });
 
         let $html = html;
         if (!(html instanceof jQuery)) $html = $(html);

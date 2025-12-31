@@ -1,12 +1,13 @@
 import { MODULE_ID } from "../utils/constants.js";
+import { LightManager } from "./LightManager.js";
 
 export class RenderEngine {
     constructor(paperbox) {
         this.paperbox = paperbox;
+        this.lightManager = paperbox.lightManager;
         this._isActive = false;
         this.tiltContainer = null;
         this.rotationContainer = null;
-        
         // State tracking for optimization
         this._lastTilt = null;
         this._lastRotation = null;
@@ -90,6 +91,11 @@ export class RenderEngine {
 
         // 2. Check if we need to update visuals (Only if state changed)
         this._updateVisuals();
+
+        // 2.5. Atualiza iluminação do Foundry
+        if (this.lightManager) {
+            this.lightManager.refresh();
+        }
 
         // 3. Sync HUD Transform (Every frame to override Foundry)
         this._syncHudTransform();

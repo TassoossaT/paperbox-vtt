@@ -1,10 +1,12 @@
 import { DEFAULTS, MODULE_ID } from "../utils/constants.js";
 import { RenderEngine } from "./RenderEngine.js";
+import { LightManager } from "./LightManager.js";
 import { InputManager } from "./InputManager.js";
 import { HUD } from "../ui/HUD.js";
 import { WallBuilder } from "./worldContainers/WallBuilder.js";
 import { DoorBuilder } from "./worldContainers/DoorBuilder.js";
 import { World3DOrchestrator } from "./world3DContainer.js";
+import { TokenBuilder } from "./worldContainers/TokenBuilder.js";
 
 export class PaperBox {
     constructor() {
@@ -17,6 +19,8 @@ export class PaperBox {
         this.orchestrator = null;
         this.wallBuilder = null;
         this.doorBuilder = null;
+        this.lightManager = null;
+        this.tokenBuilder = null;
     }
 
     initialize() {
@@ -25,12 +29,15 @@ export class PaperBox {
         this.state.rotation = game.settings.get(MODULE_ID, "savedRotation") ?? DEFAULTS.rotation;
 
         // Agora inicialize os subsistemas
+        this.lightManager = new LightManager(this);
         this.renderEngine = new RenderEngine(this);
         this.inputManager = new InputManager(this);
         this.hud = new HUD(this);
         this.orchestrator = new World3DOrchestrator(this);
         this.wallBuilder = new WallBuilder(this, this.orchestrator.container);
         this.doorBuilder = new DoorBuilder(this, this.orchestrator.container);
+        this.tokenBuilder = new TokenBuilder(this, this.orchestrator.container);
+
 
         try {
             this.wallBuilder.init();
@@ -39,6 +46,10 @@ export class PaperBox {
         try {
             this.doorBuilder.init();
         } catch (err) {console.error(`${MODULE_ID} | DoorBuilder Init Failed:`, err);}
+
+        try {
+            this.tokenBuilder.init();
+        } catch (err) {console.error(`${MODULE_ID} | TokenBuilder Init Failed:`, err);}
 
         if (canvas.ready) {this.fullRefresh(); }
         // Verificar se está ativo
