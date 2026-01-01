@@ -1,6 +1,6 @@
-import { MODULE_ID } from "../../utils/constants.js";
-import { getWall3DConfigHTML } from "../../utils/dom.js";
-import { calculateWallTransform, getWallLength, getWallSubSegment } from "../../utils/math.js";
+import { MODULE_ID } from "../../../utils/constants.js";
+import { getWall3DConfigHTML } from "../../../utils/dom.js";
+import { calculateWallTransform, getWallLength, getWallSubSegment } from "../../../utils/math.js";
 
 export class WallBuilder {
     /**
@@ -13,13 +13,17 @@ export class WallBuilder {
         this.sprites = new Map(); // Map<WallID or subId, PIXI.Sprite>
         this.container = container; // container global compartilhado
         this._refreshId = 0; // To track active refresh cycles
+        
+        // Guardar referências dos handlers para poder desregistrar depois
+        this._hookIds = [];
     }
 
     init() {
-        Hooks.on("renderWallConfig", this._onRenderWallConfig.bind(this));
-        Hooks.on("createWall", this._onCreateWall.bind(this));
-        Hooks.on("updateWall", this._onUpdateWall.bind(this));
-        Hooks.on("deleteWall", this._onDeleteWall.bind(this));
+        // Registrar hooks e guardar IDs
+        this._hookIds.push(Hooks.on("renderWallConfig", this._onRenderWallConfig.bind(this)));
+        this._hookIds.push(Hooks.on("createWall", this._onCreateWall.bind(this)));
+        this._hookIds.push(Hooks.on("updateWall", this._onUpdateWall.bind(this)));
+        this._hookIds.push(Hooks.on("deleteWall", this._onDeleteWall.bind(this)));
     }
 
     activate() {
@@ -29,6 +33,20 @@ export class WallBuilder {
 
     deactivate() {
         if (this.container) this.container.visible = false;
+    }
+
+    destroy() {
+        // Desregistrar todos os hooks
+        for (const id of this._hookIds) {
+            Hooks.off("renderWallConfig", id);
+            Hooks.off("createWall", id);
+            Hooks.off("updateWall", id);
+            Hooks.off("deleteWall", id);
+        }
+        this._hookIds = [];
+        
+        // Limpar sprites
+        this._clearSprites();
     }
 
     async refresh() {
@@ -95,16 +113,17 @@ export class WallBuilder {
         }
 
         const sprite = new PIXI.TilingSprite(texture, 1, texture.height);
+        sprite._builder = this;
         sprite.anchor.set(0.5, 1);
         sprite.cullable = false;
-
         sprite._wallData = {
             c: customCoords || doc.c,
             height: doc.getFlag(MODULE_ID, "height") || 100,
-            textureOffset: offset // Guardamos o deslocamento para o updateTransform
+            textureOffset: offset
         };
 
         this.sprites.set(spriteId, sprite);
+        
         if (this.container) this.container.addChild(sprite);
         this.updateWallSprite(sprite);
         if (this.type === "door") {
@@ -147,6 +166,7 @@ export class WallBuilder {
         // CORREÇÃO AQUI: Retorne as coordenadas vivas (pos-transformação)
         return transform.liveCoords; 
     }
+    
     _getInitialCutPoints(wall) {
         return new Set([0, 1]);
     }
@@ -230,4 +250,3 @@ export class WallBuilder {
         this.sprites.clear();
     }
 }
-

@@ -5,7 +5,7 @@
 
 import { MODULE_ID } from "./utils/constants.js";
 import { PaperBox } from "./core/PaperBox.js";
-import { registerPatches } from "./patcher.js";
+import { registerPatches } from "./core/patcher.js";
 
 // Instância Global (Singleton)
 let paperbox;

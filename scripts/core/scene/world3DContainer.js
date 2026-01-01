@@ -1,45 +1,88 @@
-import { MODULE_ID } from "../utils/constants.js";
-import { getSegmentProjection, compareSegments, findIntersectionT } from "../utils/math.js";
+import { MODULE_ID } from "../../utils/constants.js";
+import { getSegmentProjection, compareSegments, findIntersectionT } from "../../utils/math.js";
 export class World3DOrchestrator {
     constructor(paperbox) {
         this.paperbox = paperbox;
         this._pendingDepthUpdate = false;
         this._world3DContainer = new PIXI.Container();
-        this.intersectionMap = new Map()
+        this.intersectionMap = new Map();
         this._world3DContainer.sortableChildren = true;
         this._world3DContainer.cullable = false;
         this._world3DContainer.mask = null;
         if (canvas.primary.mask) canvas.primary.mask = null;
         if (canvas.primary.sprite?.mask) canvas.primary.sprite.mask = null;
         canvas.primary.addChild(this._world3DContainer);
+        
+        // Cache de posições para detectar movimento de tokens
+        this._tokenPositionCache = new Map();
     }
 
     get container() {return this._world3DContainer;}
 
+
+    syncMovingTokens() {
+        if (!this.paperbox.tokenBuilder) return false;
+        
+        let needsDepthUpdate = false;
+        
+        // Limpa cache de tokens que não existem mais (mudança de cena)
+        const currentTokenIds = new Set(this.paperbox.tokenBuilder.tokens.keys());
+        for (const cachedId of this._tokenPositionCache.keys()) {
+            if (!currentTokenIds.has(cachedId)) {
+                this._tokenPositionCache.delete(cachedId);
+            }
+        }
+        
+        for (const [tokenId, container] of this.paperbox.tokenBuilder.tokens.entries()) {
+            const doc = container._tokenDoc;
+            if (!doc?.object) continue;
+            
+            const cached = this._tokenPositionCache.get(tokenId);
+            const current = {
+                x: doc.x,
+                y: doc.y,
+                elevation: doc.elevation || 0
+            };
+            
+            // Se mudou de posição, marca para atualizar depth
+            if (!cached || cached.x !== current.x || cached.y !== current.y || cached.elevation !== current.elevation) {
+                this._tokenPositionCache.set(tokenId, current);
+                needsDepthUpdate = true;
+            }
+        }
+        
+        return needsDepthUpdate;
+    }
+
     async depthUpdate() {
-        const { wallBuilder, doorBuilder, state } = this.paperbox;
+        const { wallBuilder, doorBuilder, tokenBuilder } = this.paperbox;
+        const { state } = this.paperbox;
         const { tilt, rotation } = state;
 
         // 1. Snapshot Síncrono: Pegamos todos os sprites de uma vez
         const allSprites = [
             ...Array.from(wallBuilder.sprites.values()),
-            ...Array.from(doorBuilder.sprites.values())
+            ...Array.from(doorBuilder.sprites.values()),
+            ...Array.from(tokenBuilder.tokens.values()) 
         ];
 
         // 2. Fase de Transformação: Atualizamos as matrizes de todos ANTES de calcular profundidade
         // Agora suportando funções assíncronas
-        const spriteData = await Promise.all(allSprites.map(async sprite => {
-            // Determinamos qual builder gerencia esse sprite
-            const owner = sprite._wallData.isDoor ? doorBuilder : wallBuilder;
+        const spriteData = (await Promise.all(allSprites.map(async sprite => {
+            if (!sprite._builder) return null;
 
             // O builder atualiza a matriz visual e retorna as coordenadas NO CHÃO
-            const liveCoords = await owner.updateTransform(sprite, tilt, rotation);
+            const liveCoords = await sprite._builder.updateTransform(sprite, tilt, rotation);
+            
+            // Se liveCoords for null, o sprite é inválido (pode ser de cena antiga)
+            if (!liveCoords) return null;
+            
             return {
                 sprite,
                 // Criamos a projeção baseada no estado FINAL da matriz neste frame
                 proj: getSegmentProjection(liveCoords, rotation)
             };
-        }));
+        }))).filter(item => item !== null); // Remove elementos nulos
 
         // 3. Fase de Ordenação: Agora que todos estão estáticos neste frame, ordenamos
         spriteData.sort((A, B) => compareSegments(A.proj, B.proj));

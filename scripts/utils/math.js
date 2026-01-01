@@ -137,12 +137,11 @@ export function rotatePointAround(point, pivot, angleRad) {
  * @returns {Object} {x, y} projection vector
  */
 export function getProjectionVector(height, tilt, rotation) {
-    const rad = Math.PI / 180;
-    const upAngle = (-90 - rotation) * rad;
+    const upAngle = Math.toRadians(-90 - rotation);
     // Corrigido: compensar o scale.y global (cos(tilt)), usando tan(tilt)
     // upLen = height * tan(tilt) = height * sin(tilt) / cos(tilt)
-    const cosTilt = Math.max(0.01, Math.cos(tilt * rad));
-    const upLen = height * Math.sin(tilt * rad) / cosTilt;
+    const cosTilt = Math.max(0.01, Math.cos(Math.toRadians(tilt)));
+    const upLen = height * Math.sin(Math.toRadians(tilt)) / cosTilt;
     return {
         x: upLen * Math.cos(upAngle),
         y: upLen * Math.sin(upAngle)
@@ -159,9 +158,8 @@ export function getProjectionVector(height, tilt, rotation) {
  * @returns {number} Projected depth
  */
 export function getProjectedDepth(x, y, elevation, tilt, rotation) {
-    const rad = Math.PI / 180;
-    const rotRad = rotation * rad;
-    const tiltRad = tilt * rad;
+    const rotRad = Math.toRadians(rotation);
+    const tiltRad = Math.toRadians(tilt);
 
     const yr = (x * Math.sin(rotRad)) + (y * Math.cos(rotRad));
     const depth = (yr * Math.cos(tiltRad)) + ((elevation) * Math.sin(tiltRad));
@@ -175,9 +173,8 @@ export function getProjectedDepth(x, y, elevation, tilt, rotation) {
  * @returns {Object} Projected segment info
  */
 export function getSegmentProjection(coords, rotation) {
-    const rad = Math.PI / 180;
-    const cosR = Math.cos(rotation * rad);
-    const sinR = Math.sin(rotation * rad);
+    const cosR = Math.cos(Math.toRadians(rotation));
+    const sinR = Math.sin(Math.toRadians(rotation));
 
     // Project both points (p0 and p1) onto the rotated ground plane
     const project = (x, y) => ({
@@ -264,9 +261,8 @@ export function compareSegments(a, b) {
  * Tratamos tokens como um "segmento minúsculo" ou um ponto central com raio.
  */
 export function getTokenProjection(token, rotation) {
-    const rad = Math.PI / 180;
-    const cosR = Math.cos(rotation * rad);
-    const sinR = Math.sin(rotation * rad);
+    const cosR = Math.cos(Math.toRadians(rotation));
+    const sinR = Math.sin(Math.toRadians(rotation));
 
     // Centro do token
     const x = token.x + (token.w / 2);

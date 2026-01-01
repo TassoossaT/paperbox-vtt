@@ -1,13 +1,25 @@
-import { MODULE_ID } from "../../utils/constants.js";
+import { MODULE_ID } from "../../../utils/constants.js";
 
 export class TileBuilder {
     constructor(paperbox) {
         this.paperbox = paperbox;
+        
+        // Guardar referências dos handlers para poder desregistrar depois
+        this._hookIds = [];
     }
 
     init() {
-        Hooks.on("renderTileConfig", this._onRenderTileConfig.bind(this));
-        Hooks.on("refreshTile", this._onRefreshTile.bind(this));
+        this._hookIds.push(Hooks.on("renderTileConfig", this._onRenderTileConfig.bind(this)));
+        this._hookIds.push(Hooks.on("refreshTile", this._onRefreshTile.bind(this)));
+    }
+
+    destroy() {
+        // Desregistrar todos os hooks
+        for (const id of this._hookIds) {
+            Hooks.off("renderTileConfig", id);
+            Hooks.off("refreshTile", id);
+        }
+        this._hookIds = [];
     }
 
     _onRefreshTile(tile) {

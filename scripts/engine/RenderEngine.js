@@ -1,5 +1,4 @@
 import { MODULE_ID } from "../utils/constants.js";
-import { LightManager } from "./LightManager.js";
 
 export class RenderEngine {
     constructor(paperbox) {
@@ -97,6 +96,14 @@ export class RenderEngine {
             this.lightManager.refresh();
         }
 
+        // 2.7. Verifica movimento de tokens e atualiza depth se necessário
+        if (this.paperbox.orchestrator) {
+            const tokensMoving = this.paperbox.orchestrator.syncMovingTokens();
+            if (tokensMoving) {
+                this.paperbox.orchestrator.depthUpdate();
+            }
+        }
+
         // 3. Sync HUD Transform (Every frame to override Foundry)
         this._syncHudTransform();
     }
@@ -132,8 +139,7 @@ export class RenderEngine {
         this._lastTilt = state.tilt;
         this._lastRotation = state.rotation;
 
-        const rad = Math.PI / 180;
-        const tiltRad = state.tilt * rad;
+        const tiltRad = Math.toRadians(state.tilt) ;
 
         if (this.tiltContainer) {
             // O Scale Y cria o efeito de achatamento (perspectiva isométrica)
@@ -142,17 +148,11 @@ export class RenderEngine {
         }
 
         if (this.rotationContainer) {
-            this.rotationContainer.rotation = state.rotation * rad;
+            this.rotationContainer.rotation = Math.toRadians(state.rotation);
         }
         if (this.paperbox.orchestrator?.depthUpdate) {
             this.paperbox.orchestrator.depthUpdate();
         }
-        // if (this.paperbox.wallBuilder?.updateAllTransforms) {
-        //     this.paperbox.wallBuilder.updateAllTransforms(state.tilt, state.rotation);
-        // }
-        // if (this.paperbox.doorBuilder?.updateAllTransforms) {
-        //     this.paperbox.doorBuilder.updateAllTransforms(state.tilt, state.rotation);
-        // }
         if (canvas.ready && canvas.hud) {
             canvas.hud.align();
         }
@@ -169,11 +169,6 @@ export class RenderEngine {
         hud.style.transform = `scale(${scale}) rotateX(${state.tilt}deg) rotateZ(${state.rotation}deg)`;
     }
 
-
-    /**
-     * Calculates the screen coordinates for a given world point.
-     * This is the EXACT INVERSE of Projector.getProjectedCoordinates.
-     */
     getScreenCoordinates(worldX, worldY) {
         // Ensure the container exists
         if (!this.rotationContainer) return { x: worldX, y: worldY };

@@ -1,4 +1,4 @@
-import { MODULE_ID } from "../../utils/constants.js";
+import { MODULE_ID } from "../../../utils/constants.js";
 import { WallBuilder } from "./WallBuilder.js";
 
 export class DoorBuilder extends WallBuilder {
@@ -195,6 +195,7 @@ export class DoorBuilder extends WallBuilder {
             }
         }
     }
+    
     _onUpdateWall(doc, changes) {
         if ("ds" in changes) {
             this.animateDoor(doc, changes.ds === 1);

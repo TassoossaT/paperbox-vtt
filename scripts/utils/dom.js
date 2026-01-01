@@ -38,22 +38,23 @@ export function getWall3DConfigHTML({ label, is3D, texture, height, moduleId }) 
  * @param {object} opts - { tokenType, configPath, hasShadow, visualHeight, moduleId }
  * @returns {string}
  */
-export function getTokenConfigHTML({ tokenType, configPath, hasShadow, visualHeight, moduleId }) {
+export function getTokenConfigHTML({ tokenType, configPath, scale = 1, moduleId }) {
     return `
         <fieldset class="paperbox-token-config">
             <legend><i class="fa-solid fa-cube"></i> PaperBox 3D - HD-2D Options</legend>
             <div class="form-group">
-                <label>2.5D Token Type</label>
+                <label>Token Type</label>
                 <div class="form-fields">
-                    <select name="flags.${moduleId}.tokenType">
+                    <select name="flags.${moduleId}.tokenType" id="paperbox-token-type">
                         <option value="standard" ${tokenType === 'standard' ? 'selected' : ''}>Standard (Foundry)</option>
+                        <option value="billboard" ${tokenType === 'billboard' ? 'selected' : ''}>Billboard (2.5D)</option>
                         <option value="spritesheet" ${tokenType === 'spritesheet' ? 'selected' : ''}>Spritesheet (Animated)</option>
                         <option value="spine" ${tokenType === 'spine' ? 'selected' : ''}>Spine (Skeletal)</option>
                     </select>
                 </div>
                 <p class="hint">Octopath Style: Spine provides the smoothest animations.</p>
             </div>
-            <div class="form-group ${tokenType === 'standard' ? 'hidden' : ''}" id="paperbox-config-path">
+            <div class="form-group ${(tokenType === 'spine' || tokenType === 'spritesheet') ? '' : 'hidden'}" id="paperbox-config-path">
                 <label>Data Config (JSON)</label>
                 <div class="form-fields">
                     <file-picker name="flags.${moduleId}.configPath" type="any">
@@ -62,18 +63,12 @@ export function getTokenConfigHTML({ tokenType, configPath, hasShadow, visualHei
                     </file-picker>
                 </div>
             </div>
-            <div class="form-group slim">
-                <label>Visual Lift (Pixels)</label>
+            <div class="form-group slim ${tokenType === 'billboard' ? '' : 'hidden'}" id="paperbox-scale-field">
+                <label>Escala</label>
                 <div class="form-fields">
-                    <input type="number" name="flags.${moduleId}.visualHeight" value="${visualHeight}" step="1">
+                    <input type="number" name="flags.${moduleId}.scale" value="${scale}" step="0.01" min="0.01">
                 </div>
-                <p class="hint">Offsets the sprite vertically without changing floor depth.</p>
-            </div>
-            <div class="form-group">
-                <label>Cast 2.5D Shadow</label>
-                <div class="form-fields">
-                    <input type="checkbox" name="flags.${moduleId}.hasShadow" ${hasShadow ? 'checked' : ''}>
-                </div>
+                <p class="hint">Ajusta o tamanho do sprite (1 = original).</p>
             </div>
         </fieldset>
     `;
