@@ -54,10 +54,6 @@ export class WallBuilder {
         this._clearSprites();
         if (!canvas.walls) return;
 
-        if (this.paperbox?.orchestrator?.globalIntersections) {
-            this.paperbox.orchestrator.globalIntersections();
-        }
-
         const walls = canvas.walls.placeables.filter(w => 
             this.type === "wall" ? (w.document.door == 0) : (w.document.door > 0) && 
             w.document.getFlag(MODULE_ID, "is3D")
@@ -83,7 +79,6 @@ export class WallBuilder {
             }
         }
         await Promise.all(promises);
-        await this.paperbox.orchestrator.depthUpdate();
     }
 
 

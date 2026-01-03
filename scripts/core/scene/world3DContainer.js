@@ -1,8 +1,9 @@
 import { MODULE_ID } from "../../utils/constants.js";
 import { getSegmentProjection, compareSegments, findIntersectionT } from "../../utils/math.js";
 export class World3DOrchestrator {
-    constructor(paperbox) {
-        this.paperbox = paperbox;
+    constructor(renderer) {
+        this.renderer = renderer;
+        this.paperbox = renderer.paperbox;
         this._pendingDepthUpdate = false;
         this._world3DContainer = new PIXI.Container();
         this.intersectionMap = new Map();
@@ -21,19 +22,19 @@ export class World3DOrchestrator {
 
 
     syncMovingTokens() {
-        if (!this.paperbox.tokenBuilder) return false;
+        if (!this.renderer.tokenBuilder) return false;
         
         let needsDepthUpdate = false;
         
         // Limpa cache de tokens que não existem mais (mudança de cena)
-        const currentTokenIds = new Set(this.paperbox.tokenBuilder.tokens.keys());
+        const currentTokenIds = new Set(this.renderer.tokenBuilder.tokens.keys());
         for (const cachedId of this._tokenPositionCache.keys()) {
             if (!currentTokenIds.has(cachedId)) {
                 this._tokenPositionCache.delete(cachedId);
             }
         }
         
-        for (const [tokenId, container] of this.paperbox.tokenBuilder.tokens.entries()) {
+        for (const [tokenId, container] of this.renderer.tokenBuilder.tokens.entries()) {
             const doc = container._tokenDoc;
             if (!doc?.object) continue;
             
@@ -55,7 +56,7 @@ export class World3DOrchestrator {
     }
 
     async depthUpdate() {
-        const { wallBuilder, doorBuilder, tokenBuilder } = this.paperbox;
+        const { wallBuilder, doorBuilder, tokenBuilder, tileBuilder } = this.renderer;
         const { state } = this.paperbox;
         const { tilt, rotation } = state;
 
@@ -63,7 +64,8 @@ export class World3DOrchestrator {
         const allSprites = [
             ...Array.from(wallBuilder.sprites.values()),
             ...Array.from(doorBuilder.sprites.values()),
-            ...Array.from(tokenBuilder.tokens.values()) 
+            ...Array.from(tokenBuilder.tokens.values()),
+            ...Array.from(tileBuilder.sprites.values())
         ];
 
         // 2. Fase de Transformação: Atualizamos as matrizes de todos ANTES de calcular profundidade

@@ -158,8 +158,6 @@ export class TokenBuilder {
     // --- Transformação ---
 
     _updateTokenTransform(tokenDoc) {
-        // Apenas sinaliza o Orchestrator. 
-        // O Orchestrator chamará o updateTransform(container...) no loop de renderização.
         if (this.paperbox?.orchestrator) {
             this.paperbox.orchestrator.depthUpdate();
         }

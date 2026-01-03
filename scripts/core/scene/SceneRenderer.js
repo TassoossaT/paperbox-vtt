@@ -2,6 +2,7 @@ import { World3DOrchestrator } from "./world3DContainer.js";
 import { WallBuilder } from "./worldContainers/WallBuilder.js";
 import { DoorBuilder } from "./worldContainers/DoorBuilder.js";
 import { TokenBuilder } from "./worldContainers/TokenBuilder.js";
+import { TileBuilder } from "./worldContainers/TileBuilder.js";
 import { MODULE_ID } from "../../utils/constants.js";
 
 /**
@@ -20,10 +21,11 @@ export class SceneRenderer {
         this.isActive = false;              // Está renderizando agora?
 
         // --- ORQUESTRADOR E BUILDERS (específicos desta cena) ---
-        this.orchestrator = new World3DOrchestrator(this.paperbox);
+        this.orchestrator = new World3DOrchestrator(this);
         this.wallBuilder = new WallBuilder(this.paperbox, this.orchestrator.container);
         this.doorBuilder = new DoorBuilder(this.paperbox, this.orchestrator.container);
         this.tokenBuilder = new TokenBuilder(this.paperbox, this.orchestrator.container);
+        this.tileBuilder = new TileBuilder(this.paperbox, this.orchestrator.container);
     }
 
     /**
@@ -38,6 +40,7 @@ export class SceneRenderer {
             this.wallBuilder.init();
             this.doorBuilder.init();
             this.tokenBuilder.init();
+            this.tileBuilder.init();
             
             // Carregar texturas e montar sprites (async)
             await this.fullRefresh();
@@ -64,6 +67,7 @@ export class SceneRenderer {
         this.wallBuilder.activate();
         this.doorBuilder.activate();
         this.tokenBuilder.activate();
+        this.tileBuilder.activate();
         
         // Registrar hooks específicos desta cena (se necessário)
         this._registerHooks();
@@ -86,6 +90,7 @@ export class SceneRenderer {
         this.wallBuilder.deactivate();
         this.doorBuilder.deactivate();
         this.tokenBuilder.deactivate();
+        this.tileBuilder.deactivate();
         
         // Desregistrar hooks
         this._unregisterHooks();
@@ -115,6 +120,10 @@ export class SceneRenderer {
                 this.tokenBuilder.destroy?.();
                 this.tokenBuilder = null;
             }
+            if (this.tileBuilder) {
+                this.tileBuilder.destroy?.();
+                this.tileBuilder = null;
+            }
 
             // Destruir container PIXI
             if (this.orchestrator?.container) {
@@ -142,7 +151,8 @@ export class SceneRenderer {
             await Promise.all([
                 this.wallBuilder.refresh(),
                 this.doorBuilder.refresh(),
-                this.tokenBuilder.refresh()
+                this.tokenBuilder.refresh(),
+                this.tileBuilder.refresh()
             ]);
             
             // 3. Recalcular profundidade
