@@ -3,6 +3,7 @@ import { WallBuilder } from "./worldContainers/WallBuilder.js";
 import { DoorBuilder } from "./worldContainers/DoorBuilder.js";
 import { TokenBuilder } from "./worldContainers/TokenBuilder.js";
 import { TileBuilder } from "./worldContainers/TileBuilder.js";
+import { GridManager } from "../../engine/GridManager.js";
 import { MODULE_ID } from "../../utils/constants.js";
 
 /**
@@ -26,6 +27,8 @@ export class SceneRenderer {
         this.doorBuilder = new DoorBuilder(this.paperbox, this.orchestrator.container);
         this.tokenBuilder = new TokenBuilder(this.paperbox, this.orchestrator.container);
         this.tileBuilder = new TileBuilder(this.paperbox, this.orchestrator.container);
+        // --- GRID 3D ---
+        this.gridManager = new GridManager(this.paperbox, this.orchestrator.container, this.paperbox.inputManager);
     }
 
     /**
@@ -68,7 +71,14 @@ export class SceneRenderer {
         this.doorBuilder.activate();
         this.tokenBuilder.activate();
         this.tileBuilder.activate();
-        
+        this.gridManager.activate();
+
+        game.paperbox.gridManager = this.gridManager;
+        // // Hook para detectar mudanças nas configurações da cena
+        // this._sceneUpdateHook = Hooks.on('updateScene', (scene, changes) => {
+        //     this.gridManager.forceGridRebuild();
+        // });
+
         // Registrar hooks específicos desta cena (se necessário)
         this._registerHooks();
     }
@@ -86,12 +96,13 @@ export class SceneRenderer {
         // Esconder container PIXI
         this.orchestrator.container.visible = false;
         
+
         // Desativar listeners dos builders
         this.wallBuilder.deactivate();
         this.doorBuilder.deactivate();
         this.tokenBuilder.deactivate();
         this.tileBuilder.deactivate();
-        
+        this.gridManager.deactivate();
         // Desregistrar hooks
         this._unregisterHooks();
     }
@@ -123,6 +134,10 @@ export class SceneRenderer {
             if (this.tileBuilder) {
                 this.tileBuilder.destroy?.();
                 this.tileBuilder = null;
+            }
+            if (this.gridManager) {
+                this.gridManager.destroy?.();
+                this.gridManager = null;
             }
 
             // Destruir container PIXI

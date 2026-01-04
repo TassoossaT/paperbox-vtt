@@ -1,4 +1,5 @@
 import { MODULE_ID } from "../utils/constants.js";
+import { GridManager } from "./GridManager.js";
 
 export class RenderEngine {
     constructor(paperbox) {
@@ -29,13 +30,15 @@ export class RenderEngine {
         // We move everything from canvas.stage to our rotation container
         // This includes canvas.primary (background, drawings, tokens), canvas.grid, etc.
         const children = [...canvas.stage.children];
+        
         for (const child of children) {
             this.rotationContainer.addChild(child);
         }
+        
         this.tiltContainer.addChild(this.rotationContainer);
         canvas.stage.mask = null;
         canvas.stage.addChild(this.tiltContainer);
-
+        
         // 4. Start Loop
         canvas.app.ticker.add(this._onTick, this, PIXI.UPDATE_PRIORITY.LOW);
         
@@ -52,6 +55,12 @@ export class RenderEngine {
 
         canvas.app.ticker.remove(this._onTick, this);
         Hooks.off("canvasPan", this._onCanvasPan.bind(this));
+
+        // Desativa GridManager
+        if (this.gridManager) {
+            this.gridManager.deactivate();
+            this.gridManager = null;
+        }
 
         // Restore Hierarchy
         if (this.rotationContainer) {
@@ -139,17 +148,22 @@ export class RenderEngine {
         this._lastTilt = state.tilt;
         this._lastRotation = state.rotation;
 
-        const tiltRad = Math.toRadians(state.tilt) ;
+        const tiltRad = Math.toRadians(state.tilt);
 
         if (this.tiltContainer) {
-            // O Scale Y cria o efeito de achatamento (perspectiva isométrica)
             const cosTilt = Math.max(0.01, Math.cos(tiltRad)); 
             this.tiltContainer.scale.y = cosTilt;
         }
 
         if (this.rotationContainer) {
+        // Atualiza grid 3D
+        if (this.gridManager) {
+            this.gridManager.update(state.tilt, state.rotation);
+        }
+        
             this.rotationContainer.rotation = Math.toRadians(state.rotation);
         }
+        
         if (this.paperbox.orchestrator?.depthUpdate) {
             this.paperbox.orchestrator.depthUpdate();
         }
@@ -183,9 +197,9 @@ export class RenderEngine {
         // including all rotations, tilts, scales, and parent transforms.
         const globalPos = this.rotationContainer.toGlobal(new PIXI.Point(worldX, worldY));
 
-        return {
-            x: globalPos.x,
-            y: globalPos.y
-        };
+        const gridLayer = findGridLayer(this.rotationContainer);
+        if (gridLayer) {
+            gridLayer.visible = true;
+        }
     }
 }

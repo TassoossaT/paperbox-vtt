@@ -141,7 +141,8 @@ export function getProjectionVector(height, tilt, rotation) {
     // Corrigido: compensar o scale.y global (cos(tilt)), usando tan(tilt)
     // upLen = height * tan(tilt) = height * sin(tilt) / cos(tilt)
     const cosTilt = Math.max(0.01, Math.cos(Math.toRadians(tilt)));
-    const upLen = height * Math.sin(Math.toRadians(tilt)) / cosTilt;
+    const sinTilt = Math.sin(Math.toRadians(tilt));
+    const upLen = height * sinTilt / cosTilt;
     return {
         x: upLen * Math.cos(upAngle),
         y: upLen * Math.sin(upAngle)

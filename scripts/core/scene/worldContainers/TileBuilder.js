@@ -169,7 +169,6 @@ export class TileBuilder {
         // Adiciona referência ao builder no tile para debug via console
         if (tile && !tile._pb3DBuilder) {
             tile._pb3DBuilder = this;
-            console.log(`✅ TileBuilder: Referência de debug adicionada ao tile ${doc.id}`);
         }
 
         this.updateTileVisuals(sprite, tile);
