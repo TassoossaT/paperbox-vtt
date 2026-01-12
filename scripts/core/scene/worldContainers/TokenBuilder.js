@@ -1,4 +1,4 @@
-import { calculateWallTransform } from "../../../utils/math.js";
+import { calculateTransform } from "../../../utils/math.js";
 import { MODULE_ID } from "../../../utils/constants.js";
 import { getTokenConfigHTML } from "../../../utils/dom.js";
 
@@ -205,7 +205,7 @@ export class TokenBuilder {
         const p1x = cx + dx;
         const p1y = cy + dy;
 
-        const transform = calculateWallTransform({
+        const transform = calculateTransform({
             coords: [p0x, p0y, p1x, p1y],
             height: heightPx,
             tilt: tilt,

@@ -1,6 +1,5 @@
 import { World3DOrchestrator } from "./world3DContainer.js";
 import { WallBuilder } from "./worldContainers/WallBuilder.js";
-import { DoorBuilder } from "./worldContainers/DoorBuilder.js";
 import { TokenBuilder } from "./worldContainers/TokenBuilder.js";
 import { TileBuilder } from "./worldContainers/TileBuilder.js";
 import { GridManager } from "../../engine/GridManager.js";
@@ -24,11 +23,10 @@ export class SceneRenderer {
         // --- ORQUESTRADOR E BUILDERS (específicos desta cena) ---
         this.orchestrator = new World3DOrchestrator(this);
         this.wallBuilder = new WallBuilder(this.paperbox, this.orchestrator.container);
-        this.doorBuilder = new DoorBuilder(this.paperbox, this.orchestrator.container);
         this.tokenBuilder = new TokenBuilder(this.paperbox, this.orchestrator.container);
         this.tileBuilder = new TileBuilder(this.paperbox, this.orchestrator.container);
         // --- GRID 3D ---
-        this.gridManager = new GridManager(this.paperbox, this.orchestrator.container, this.paperbox.inputManager);
+        this.gridManager = new GridManager(this.paperbox, this.orchestrator.container);
     }
 
     /**
@@ -40,8 +38,7 @@ export class SceneRenderer {
         
         try {
             // Inicializar builders (carrega dados do Foundry)
-            this.wallBuilder.init();
-            this.doorBuilder.init();
+            this.wallBuilder.init(); // ESSENCIAL para registrar hooks e criar paredes 3D
             this.tokenBuilder.init();
             this.tileBuilder.init();
             
@@ -67,8 +64,7 @@ export class SceneRenderer {
         this.orchestrator.container.visible = true;
         
         // Ativar listeners dos builders
-        this.wallBuilder.activate();
-        this.doorBuilder.activate();
+        // this.wallBuilder.activate();
         this.tokenBuilder.activate();
         this.tileBuilder.activate();
         this.gridManager.activate();
@@ -98,8 +94,7 @@ export class SceneRenderer {
         
 
         // Desativar listeners dos builders
-        this.wallBuilder.deactivate();
-        this.doorBuilder.deactivate();
+        // this.wallBuilder.deactivate();
         this.tokenBuilder.deactivate();
         this.tileBuilder.deactivate();
         this.gridManager.deactivate();
@@ -122,10 +117,6 @@ export class SceneRenderer {
             if (this.wallBuilder) {
                 this.wallBuilder.destroy?.();
                 this.wallBuilder = null;
-            }
-            if (this.doorBuilder) {
-                this.doorBuilder.destroy?.();
-                this.doorBuilder = null;
             }
             if (this.tokenBuilder) {
                 this.tokenBuilder.destroy?.();
@@ -164,8 +155,7 @@ export class SceneRenderer {
             
             // 2. Recarregar dados e texturas (em paralelo)
             await Promise.all([
-                this.wallBuilder.refresh(),
-                this.doorBuilder.refresh(),
+                // this.wallBuilder.refresh(),
                 this.tokenBuilder.refresh(),
                 this.tileBuilder.refresh()
             ]);
@@ -183,8 +173,13 @@ export class SceneRenderer {
      */
     updateTransform(tilt, rotation) {
         if (!this.orchestrator) return;
-        
-        // Apenas recalcular profundidade (builders já têm dados)
+
+        const cameraState = { tilt, rotation };
+        for (const visual of this.orchestrator.visualComponents) {
+            if (typeof visual.update === 'function') {
+                visual.update(cameraState);
+            }
+        }
         this.orchestrator.depthUpdate();
     }
 

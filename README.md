@@ -254,7 +254,7 @@ paperbox.fullRefresh()             // Recarregar tudo
 
 **`scripts/utils/math.js`**
 - Funções matemáticas:
-  - `calculateWallTransform()`: Calcula matriz de transformação
+  - `calculateTransform()`: Calcula matriz de transformação
   - `getSegmentProjection()`: Projeção oblíqua
   - `compareSegments()`: Comparação de profundidade
   - `findIntersectionT()`: Intersecção de segmentos
@@ -397,7 +397,7 @@ async createWall(wallDoc) {
     sprite.height = height;
     
     // Calcular transformação
-    const transform = calculateWallTransform(wall, tilt, rotation);
+    const transform = calculateTransform(wall, tilt, rotation);
     sprite.position.set(transform.x, transform.y);
     sprite.rotation = transform.angle;
     

@@ -9,17 +9,17 @@
 /**
  * Calcula a matriz de transformação 2.5D suportando Swing, Slide e Ascend/Descend.
  */
-export function calculateWallTransform(data) {
-    const { coords, height, tilt, rotation, doorAngle = 0, doorPivot = null, slide = 0, lift = 0 } = data;
+export function calculateTransform(data) {
+    const { coords, height, tilt, rotation, angle = 0, pivot = null, slide = 0, lift = 0 } = data;
 
     // 1. Pontos iniciais
     let p0 = { x: coords[0], y: coords[1] };
     let p1 = { x: coords[2], y: coords[3] };
 
     // 2. Aplica Swing/Swivel (Rotação)
-    if (doorAngle !== 0 && doorPivot) {
-        p0 = rotatePointAround(p0, doorPivot, doorAngle);
-        p1 = rotatePointAround(p1, doorPivot, doorAngle);
+    if (angle !== 0 && pivot) {
+        p0 = rotatePointAround(p0, pivot, angle);
+        p1 = rotatePointAround(p1, pivot, angle);
     }
 
     const dx = p1.x - p0.x;
