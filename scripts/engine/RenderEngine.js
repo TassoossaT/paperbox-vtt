@@ -1,12 +1,10 @@
-import { MODULE_ID } from "../utils/constants.js";
-
 export class RenderEngine {
     constructor(paperbox) {
         this.paperbox = paperbox;
+        this.lightManager = paperbox.lightManager;
         this._isActive = false;
         this.tiltContainer = null;
         this.rotationContainer = null;
-        
         // State tracking for optimization
         this._lastTilt = null;
         this._lastRotation = null;
@@ -29,13 +27,15 @@ export class RenderEngine {
         // We move everything from canvas.stage to our rotation container
         // This includes canvas.primary (background, drawings, tokens), canvas.grid, etc.
         const children = [...canvas.stage.children];
+        
         for (const child of children) {
             this.rotationContainer.addChild(child);
         }
+        
         this.tiltContainer.addChild(this.rotationContainer);
         canvas.stage.mask = null;
         canvas.stage.addChild(this.tiltContainer);
-
+        
         // 4. Start Loop
         canvas.app.ticker.add(this._onTick, this, PIXI.UPDATE_PRIORITY.LOW);
         
@@ -52,6 +52,12 @@ export class RenderEngine {
 
         canvas.app.ticker.remove(this._onTick, this);
         Hooks.off("canvasPan", this._onCanvasPan.bind(this));
+
+        // Desativa GridManager
+        if (this.gridManager) {
+            this.gridManager.deactivate();
+            this.gridManager = null;
+        }
 
         // Restore Hierarchy
         if (this.rotationContainer) {
@@ -91,6 +97,19 @@ export class RenderEngine {
         // 2. Check if we need to update visuals (Only if state changed)
         this._updateVisuals();
 
+        // 2.5. Atualiza iluminação do Foundry
+        if (this.lightManager) {
+            this.lightManager.refresh();
+        }
+
+        // 2.7. Verifica movimento de tokens e atualiza depth se necessário
+        if (this.paperbox.orchestrator) {
+            const tokensMoving = this.paperbox.orchestrator.syncMovingTokens();
+            if (tokensMoving) {
+                this.paperbox.orchestrator.depthUpdate();
+            }
+        }
+
         // 3. Sync HUD Transform (Every frame to override Foundry)
         this._syncHudTransform();
     }
@@ -126,24 +145,25 @@ export class RenderEngine {
         this._lastTilt = state.tilt;
         this._lastRotation = state.rotation;
 
-        const rad = Math.PI / 180;
-        const tiltRad = state.tilt * rad;
+        const tiltRad = Math.toRadians(state.tilt);
 
         if (this.tiltContainer) {
-            // O Scale Y cria o efeito de achatamento (perspectiva isométrica)
             const cosTilt = Math.max(0.01, Math.cos(tiltRad)); 
             this.tiltContainer.scale.y = cosTilt;
         }
 
         if (this.rotationContainer) {
-            this.rotationContainer.rotation = state.rotation * rad;
+        // Atualiza grid 3D
+        if (this.gridManager) {
+            this.gridManager.update(state.tilt, state.rotation);
         }
-
-        // Notifica o WallBuilder (importante para iluminação e colisão)
-        if (this.paperbox.wallBuilder?.updateAllTransforms) {
-            this.paperbox.wallBuilder.updateAllTransforms(state.tilt, state.rotation);
+        
+            this.rotationContainer.rotation = Math.toRadians(state.rotation);
         }
-
+        
+        if (this.paperbox.orchestrator?.depthUpdate) {
+            this.paperbox.orchestrator.depthUpdate();
+        }
         if (canvas.ready && canvas.hud) {
             canvas.hud.align();
         }
@@ -160,11 +180,6 @@ export class RenderEngine {
         hud.style.transform = `scale(${scale}) rotateX(${state.tilt}deg) rotateZ(${state.rotation}deg)`;
     }
 
-
-    /**
-     * Calculates the screen coordinates for a given world point.
-     * This is the EXACT INVERSE of Projector.getProjectedCoordinates.
-     */
     getScreenCoordinates(worldX, worldY) {
         // Ensure the container exists
         if (!this.rotationContainer) return { x: worldX, y: worldY };
@@ -179,9 +194,9 @@ export class RenderEngine {
         // including all rotations, tilts, scales, and parent transforms.
         const globalPos = this.rotationContainer.toGlobal(new PIXI.Point(worldX, worldY));
 
-        return {
-            x: globalPos.x,
-            y: globalPos.y
-        };
+        const gridLayer = findGridLayer(this.rotationContainer);
+        if (gridLayer) {
+            gridLayer.visible = true;
+        }
     }
 }

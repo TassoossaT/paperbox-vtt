@@ -1,1 +1,0 @@
-// Cálculos matemáticos de projeção
