@@ -280,3 +280,55 @@ export function getTokenProjection(token, rotation) {
         isPoint: true         // Flag para o comparador
     };
 }
+
+// math.js
+
+export function projectPoint(x, y, z, tilt, rotation) {
+    const radTilt = Math.PI * tilt / 180;
+    const radRot = Math.PI * (-90 - rotation) / 180;
+
+    const cosTilt = Math.max(0.01, Math.cos(radTilt));
+    const sinTilt = Math.sin(radTilt);
+    
+    // Fator de levantamento baseado na inclinação da câmera
+    const liftLength = z * (sinTilt / cosTilt);
+
+    return {
+        x: x + liftLength * Math.cos(radRot),
+        y: y + liftLength * Math.sin(radRot)
+    };
+}
+
+export function rotatePoint3D(v, pivot, angleRad) {
+    const dx = v.x - pivot.x;
+    const dy = v.y - pivot.y;
+    return {
+        x: pivot.x + dx * Math.cos(angleRad) - dy * Math.sin(angleRad),
+        y: pivot.y + dx * Math.sin(angleRad) + dy * Math.cos(angleRad),
+        z: v.z
+    };
+}
+
+export function getFaceDepth(vertices, rotation, tilt) {
+    const radR = Math.toRadians(rotation);
+    const radT = Math.toRadians(tilt);
+    const cosR = Math.cos(radR);
+    const sinR = Math.sin(radR);
+    const cosT = Math.cos(radT);
+    const sinT = Math.sin(radT);
+
+    // Calculamos a profundidade de cada vértice
+    const depths = vertices.map(v => {
+        // Distância horizontal projetada no eixo da câmera
+        const dist2D = v.x * sinR + v.y * cosR;
+        // Profundidade final combinando posição no mapa e altura (Z)
+        // Isso permite que o topo de um prédio seja ordenado corretamente
+        return (dist2D * cosT) + (v.z * sinT);
+    });
+
+    return {
+        minZ: Math.min(...depths),
+        maxZ: Math.max(...depths),
+        avgZ: depths.reduce((a, b) => a + b, 0) / depths.length
+    };
+}

@@ -35,8 +35,6 @@ export class Door3D extends Wall3D {
 
         if (this.doc.ds === 1) {
             this.animate(true, 0); 
-        } else {
-            this.refresh();
         }
     }
 
@@ -63,7 +61,7 @@ export class Door3D extends Wall3D {
         if (open) {
             switch (animType) {
                 case "swivel":
-                case "swing":   targets.angle = (Math.PI / 2) * strength * direction; break;
+                case "swing":     targets.angle = (Math.PI / 2) * strength * direction; break;
                 case "slide":     targets.slide = - 0.9 * strength * direction; break;
                 case "ascend":    targets.lift = 1.0 * strength; targets.alpha = 0.3; break;
                 case "descend":   targets.lift = -1.0 * strength; targets.alpha = 0.3; break;

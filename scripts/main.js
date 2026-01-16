@@ -1,24 +1,23 @@
 ﻿/**
  * PaperBox VTT - Main Entry Point
- * Author: Tasso ossaT
+ * Author: Tasso Augusto
  */
-
 
 import { MODULE_ID } from "./utils/constants.js";
 import { PaperBox } from "./core/PaperBox.js";
 import { registerPatches } from "./core/patcher.js";
 import { getWall3DConfigHTML } from "./utils/dom.js";
 
-// Instância Global (Singleton)
+// Global Singleton Instance
 let paperbox;
 
 Hooks.once('init', () => {
     registerPatches();
 
-    // 1. Registrar Configurações
+    // 1. Register Client Settings
     game.settings.register(MODULE_ID, "enabled", {
-        name: "Ativar Modo 2.5D",
-        hint: "Ativa a visualização isométrica/perspectiva.",
+        name: "Enable 2.5D Mode",
+        hint: "Activates isometric/perspective visualization.",
         scope: "client",
         config: true,
         type: Boolean,
@@ -33,7 +32,7 @@ Hooks.once('init', () => {
         scope: "client", config: false, type: Number, default: 0
     });
 
-    // Settings for HUD Position
+    // HUD Position Settings
     game.settings.register(MODULE_ID, "hudPosTilt", {
         scope: "client", config: false, type: Object, default: { top: "20%", right: "20px" }
     });
@@ -41,10 +40,10 @@ Hooks.once('init', () => {
         scope: "client", config: false, type: Object, default: { bottom: "20px", left: "50%" }
     });
 
-    // 2. Instanciar Core
+    // 2. Instantiate Core
     paperbox = new PaperBox();
     
-    // Expor API globalmente para macros/outros módulos
+    // Expose API globally for macros and other modules
     game.paperbox = paperbox;
 });
 
@@ -52,52 +51,52 @@ Hooks.on('ready', () => {
     paperbox.initialize();
 });
 
-// --- PaperBox 3D: Opções extras no formulário de parede ---
+// --- PaperBox 3D: Wall Configuration Injection ---
 Hooks.on("renderWallConfig", (app, html, data) => {
 
-    // Obtém o documento da parede de forma robusta
     const doc = app?.document || app?.object?.document || app?.object;
     if (!doc) return;
 
-    // Utilitário para ler flags de forma segura
-    function getFlag(key, field, fallback = undefined) {
+    /**
+     * Helper to read flags safely
+     */
+    function getFlag(field, fallback = undefined) {
         try {
-            if (typeof doc.getFlag === "function") return doc.getFlag(key, field) ?? fallback;
-            return doc.flags?.[key]?.[field] ?? fallback;
+            return doc.getFlag(MODULE_ID, field) ?? fallback;
         } catch (e) { return fallback; }
     }
 
+    const is3D = !!getFlag("is3D", false);
+    const texture = getFlag("texture", "");
+    const vertices = getFlag("vertices", null);
+    
+    // UI Logic: If we have no vertices but height was used previously, 
+    // we show that, otherwise default to 100.
+    const currentHeight = getFlag("height", 100);
 
-    const is3D = !!getFlag(MODULE_ID, "is3D", false);
-    const texture = getFlag(MODULE_ID, "texture", "");
-    const height = getFlag(MODULE_ID, "height", 100);
-    const renderMode = getFlag(MODULE_ID, "renderMode", "tile");
-
-    // Usa utilitário para montar o HTML padronizado
+    // Build the standardized HTML block
     const content = getWall3DConfigHTML({
         label: "Enable 3D Wall",
         is3D,
         texture,
-        height,
-        renderMode,
+        height: currentHeight,
         moduleId: MODULE_ID
     });
 
-  // Garante que $html é um objeto jQuery
     let $html = html instanceof jQuery ? html : $(html);
 
-  // Evita duplicidade: remove bloco antigo se já existir
-    $html.find('fieldset legend:contains("PaperBox 3D")').parent().remove();
+    // Prevent duplicates
+    $html.find(`fieldset legend:contains("PaperBox 3D")`).parent().remove();
 
-  // Insere o bloco no final do formulário scrollável, ou no final do formulário
+    // Inject into the form
     const scrollable = $html.find(".standard-form.scrollable");
     if (scrollable.length) {
-    scrollable.append(content);
+        scrollable.append(content);
     } else {
         $html.append(content);
     }
 
-  // Ativa o file picker para textura
+    // Texture File Picker
     $html.find(`button.file-picker[data-target="flags.${MODULE_ID}.texture"]`).off("click").on("click", (event) => {
         event.preventDefault();
         const target = event.currentTarget.dataset.target;
@@ -110,7 +109,37 @@ Hooks.on("renderWallConfig", (app, html, data) => {
         }).browse();
     });
 
-  // Ajusta altura do app se possível
     if (typeof app.setPosition === "function") app.setPosition({ height: "auto" });
+
+    // Handle form submission to generate the vertices3D array
+    let $form = $html.closest('form');
+    $form.off('submit.paperbox3d').on('submit.paperbox3d', async function (event) {
+        const isCurrently3D = $html.find(`input[name="flags.${MODULE_ID}.is3D"]`).is(':checked');
+        if (!isCurrently3D) return;
+
+        // Current Foundry wall coordinates
+        const x1 = doc.c[0];
+        const y1 = doc.c[1];
+        const x2 = doc.c[2];
+        const y2 = doc.c[3];
+        
+        const height = Number($html.find(`input[name="flags.${MODULE_ID}.height"]`).val() || 100);
+
+        // Logic: Only generate new vertices if they don't exist 
+        // OR if you want the config window to always reset to the wall line.
+        // For "Free Stretching", you'd usually keep the existing vertices3D.
+        const existingVertices = getFlag("vertices");
+        
+        if (!existingVertices) {
+            const vertices = [
+                { x: x1, y: y1, z: height }, // V0: Top Start
+                { x: x2, y: y2, z: height }, // V1: Top End
+                { x: x2, y: y2, z: 0 },      // V2: Bottom End
+                { x: x1, y: y1, z: 0 }       // V3: Bottom Start
+            ];
+            
+            // Note: Use setFlag directly on the document
+            await doc.setFlag(MODULE_ID, "vertices", vertices);
+        }
+    });
 });
-// --- Fim PaperBox 3D ---

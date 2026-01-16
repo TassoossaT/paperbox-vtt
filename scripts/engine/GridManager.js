@@ -72,6 +72,38 @@ export class GridManager {
     }
 
     /**
+     * Converte uma posição de tela (PIXI.Point ou {x, y}) para coordenadas de mundo 2D (board)
+     * @param {PIXI.Point|Object} screenPos
+     * @returns {PIXI.Point}
+     */
+    screenToWorld(screenPos) {
+        const target = this.rotationContainer || canvas.stage;
+        return target.toLocal(screenPos);
+    }
+
+    /**
+     * Converte uma posição de mundo 2D (board) para coordenadas locais de um objeto (ex: tile, mesh)
+     * @param {PIXI.DisplayObject} obj
+     * @param {PIXI.Point|Object} worldPos
+     * @returns {PIXI.Point}
+     */
+    worldToLocal(obj, worldPos) {
+        const target = this.rotationContainer || canvas.stage;
+        return obj.toLocal(worldPos, target);
+    }
+
+    /**
+     * Converte uma posição local de um objeto para coordenadas de mundo 2D (board)
+     * @param {PIXI.DisplayObject} obj
+     * @param {PIXI.Point|Object} localPos
+     * @returns {PIXI.Point}
+     */
+    localToWorld(obj, localPos) {
+        const target = this.rotationContainer || canvas.stage;
+        return obj.toGlobal(localPos, target);
+    }
+
+    /**
      * Inicializa o gerenciador (chamado pelo RenderEngine)
      */
     activate() {

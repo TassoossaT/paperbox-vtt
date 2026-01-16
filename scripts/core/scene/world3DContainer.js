@@ -79,15 +79,17 @@ export class World3DOrchestrator {
         for (const visual of this.visualComponents) {
             // Assumimos que o VisualComponent já executou seu próprio 'update' 
             // internamente e guardou o resultado em sprite.lastTransform
-            for (const sprite of visual.sprites) {
-                const transform = sprite.lastTransform; 
-                if (!transform || !transform.liveCoords) continue;
+            if (Array.isArray(visual.sprites)) {
+                for (const sprite of visual.sprites) {
+                    const transform = sprite.lastTransform; 
+                    if (!transform || !transform.liveCoords) continue;
 
-                spriteData.push({
-                    sprite,
-                    // Projetamos o segmento transformado para o eixo de profundidade (Z-Order)
-                    proj: getSegmentProjection(transform.liveCoords, rotation)
-                });
+                    spriteData.push({
+                        sprite,
+                        // Projetamos o segmento transformado para o eixo de profundidade (Z-Order)
+                        proj: getSegmentProjection(transform.liveCoords, rotation)
+                    });
+                }
             }
         }
 

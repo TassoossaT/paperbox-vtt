@@ -66,7 +66,7 @@ export class SceneRenderer {
         // Ativar listeners dos builders
         // this.wallBuilder.activate();
         this.tokenBuilder.activate();
-        this.tileBuilder.activate();
+        // this.tileBuilder.activate();
         this.gridManager.activate();
 
         game.paperbox.gridManager = this.gridManager;
@@ -157,7 +157,7 @@ export class SceneRenderer {
             await Promise.all([
                 // this.wallBuilder.refresh(),
                 this.tokenBuilder.refresh(),
-                this.tileBuilder.refresh()
+                // this.tileBuilder.refresh()
             ]);
             
             // 3. Recalcular profundidade

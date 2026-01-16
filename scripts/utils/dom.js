@@ -123,6 +123,94 @@ export function getTile3DConfigHTML({ is3D, elevTL, elevTR, elevBL, elevBR, rend
 }
 
 
+// /**
+//  * Gera o HTML do fieldset de configuração 3D para tiles (pisos, telhados, rampas)
+//  * @param {object} opts - { is3D, elevTL, elevTR, elevBL, elevBR, moduleId }
+//  * @returns {string}
+//  */
+// export function getTile3DConfigHTML(data) {
+//     const is3D = data.is3D ? "checked" : "";
+//     const mode = data.mode || "manual"; 
+//     const modelPath = data.modelPath || "";
+    
+//     const el = {
+//         tl: data.elevTL || 0,
+//         tr: data.elevTR || 0,
+//         bl: data.elevBL || 0,
+//         br: data.elevBR || 0
+//     };
+
+//     const style = `
+//         <style>
+//             .paperbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+//             .paperbox-center { text-align: center; font-weight: bold; margin: 8px 0; border-bottom: 1px solid #ccc; padding-bottom: 4px;}
+//             .paperbox-hidden { display: none !important; }
+//             .paperbox-input-group { display: flex; flex-direction: column; align-items: center; }
+//             .paperbox-input-group label { font-size: 0.8em; margin-bottom: 2px; color: #555; }
+//             .paperbox-config-container { background: rgba(0,0,0,0.03); padding: 8px; border-radius: 4px; border: 1px solid #999; margin-top: 5px; }
+//         </style>
+//     `;
+
+//     return `
+//     ${style}
+//     <hr>
+//     <div class="form-group">
+//         <label><i class="fas fa-cube"></i> Habilitar PaperBox 3D</label>
+//         <div class="form-fields">
+//             <input type="checkbox" name="flags.${data.moduleId}.is3D" class="paperbox-enable-3d" ${is3D}/>
+//         </div>
+//     </div>
+
+//     <div class="paperbox-config-container ${!data.is3D ? 'paperbox-hidden' : ''}">
+        
+//         <div class="form-group">
+//             <label>Tipo de Geometria</label>
+//             <div class="form-fields">
+//                 <select name="flags.${data.moduleId}.mode" class="paperbox-mode-select">
+//                     <option value="manual" ${mode === 'manual' ? 'selected' : ''}>Manual (4 Pontos)</option>
+//                     <option value="model" ${mode === 'model' ? 'selected' : ''}>Modelo Importado (.obj)</option>
+//                 </select>
+//             </div>
+//         </div>
+
+//         <div class="paperbox-mode-manual ${mode !== 'manual' ? 'paperbox-hidden' : ''}">
+//             <div class="paperbox-center">Elevação dos Vértices (Z)</div>
+            
+//             <div class="paperbox-grid">
+//                 <div class="paperbox-input-group">
+//                     <label>Topo Esq. (TL)</label>
+//                     <input type="number" name="flags.${data.moduleId}.elevationTL" value="${el.tl}" step="10">
+//                 </div>
+//                 <div class="paperbox-input-group">
+//                     <label>Topo Dir. (TR)</label>
+//                     <input type="number" name="flags.${data.moduleId}.elevationTR" value="${el.tr}" step="10">
+//                 </div>
+//                 <div class="paperbox-input-group">
+//                     <label>Base Esq. (BL)</label>
+//                     <input type="number" name="flags.${data.moduleId}.elevationBL" value="${el.bl}" step="10">
+//                 </div>
+//                 <div class="paperbox-input-group">
+//                     <label>Base Dir. (BR)</label>
+//                     <input type="number" name="flags.${data.moduleId}.elevationBR" value="${el.br}" step="10">
+//                 </div>
+//             </div>
+//             <p class="notes" style="text-align: center; font-size: 0.8em;">Define a altura Z de cada canto relativo ao centro.</p>
+//         </div>
+
+//         <div class="paperbox-mode-model ${mode !== 'model' ? 'paperbox-hidden' : ''}">
+//             <div class="form-group">
+//                 <label>Arquivo .OBJ</label>
+//                 <div class="form-fields">
+//                     <file-picker type="any" class="paperbox-obj-path" name="flags.${data.moduleId}.modelPath" value="${modelPath}"></file-picker>
+//                 </div>
+//             </div>
+//              <button type="button" class="paperbox-import-obj">
+//                 <i class="fas fa-sync"></i> Recarregar Modelo
+//             </button>
+//         </div>
+//     </div>
+//     `;
+// }
 
 /**
  * Gera o HTML do fieldset de configuração de Token 2.5D/3D para PaperBox

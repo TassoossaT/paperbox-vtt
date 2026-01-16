@@ -35,8 +35,9 @@ export class WallBuilder {
     }
 
     syncAll() {
-        this.clearAll();
         if (!canvas.walls) return;
+        for (let el of this.elements.values()) el.destroy();
+        this.elements.clear();
 
         for (let wall of canvas.walls.placeables) {
             this._onUpdate(wall.document);
@@ -84,8 +85,4 @@ export class WallBuilder {
         }
     }
 
-    clearAll() {
-        for (let el of this.elements.values()) el.destroy();
-        this.elements.clear();
-    }
 }

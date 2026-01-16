@@ -1,201 +1,444 @@
-import { getWallLength, getWallSubSegment, calculateTransform } from "../../../utils/math.js";
+import { MODULE_ID } from "../../../utils/constants.js";
+import { projectPoint, rotatePoint3D, getProjectionVector } from "../../../utils/math.js";
+import { ObjData } from "./ObjData.js";
 
+// ==========================================
+// 2. O RENDERIZADOR (VisualComponent.js)
+// ==========================================
 export class VisualComponent {
     constructor(objectId, container, orchestrator, parent = null) {
         this.objectId = objectId;
         this.container = container;
         this.parent = parent;
         this.orchestrator = orchestrator;
-        this.sprites = [];
-        this.texture = null;
+        
+        // [INTEGRAÇÃO] O cérebro dos dados
+        this.data = new ObjData(); 
+        
+        // [INTEGRAÇÃO] Array paralelo para guardar os sprites/meshes do PIXI
+        this.pixiMeshes = []; 
 
-        // Estado genérico para animações
-        this.state = {
-            angle: 0,
-            slide: 0,
-            lift: 0,
-            alpha: 1,
-            scale: 1
-        };
-
-        this._coords = null;
-        this._height = null;
         this.isReady = false;
-        this._ticker = null;
+        this._dirty = false;
+        this.customHandles = [];
 
         if (this.orchestrator?.registerComponent) {
             this.orchestrator.registerComponent(this);
         }
+
+        // Ticker
+        this._tickerFunction = this._tickerUpdate.bind(this);
+        if (canvas?.app?.ticker) {
+            canvas.app.ticker.add(this._tickerFunction);
+        }
+        
+        // Rastreamento
+        this._lastParentX = parent?.doc?.object?.x || 0;
+        this._lastParentY = parent?.doc?.object?.y || 0;
+        this._lastElevation = parent?.doc?.elevation || 0; // Monitora elevação também
     }
 
-    get coords() { return this._coords; }
-    set coords(val) { this._coords = val; this._autoUpdate(); }
+    _tickerUpdate() {
+        if (!this.isReady || !this.parent?.doc?.object) return;
 
-    get height() { return this._height; }
-    set height(val) { this._height = val; this._autoUpdate(); }
+        const obj = this.parent.doc.object;
+        const doc = this.parent.doc;
 
-    /**
-     * Motor de Animação Genérico
-     */
-    animateTo(targetProps, duration = 30) {
-        if (duration <= 0) {
-            Object.assign(this.state, targetProps);
-            return this._autoUpdate();
+        // ============================================================
+        // CORREÇÃO DO FANTASMA 2D
+        // ============================================================
+        // Forçamos a invisibilidade a cada frame para vencer o refresh do Foundry
+        if (obj.mesh) {
+            obj.mesh.visible = false;
+            obj.mesh.alpha = 0; // Garantia extra
+        } 
+        if (obj.tile) { // Fallback para versões antigas ou compatibilidade
+            obj.tile.visible = false; 
+            obj.tile.alpha = 0;
+        }
+        // ============================================================
+
+        // Verifica movimento ou mudança de elevação do PAI (Foundry)
+        if (obj.x !== this._lastParentX || obj.y !== this._lastParentY || doc.elevation !== this._lastElevation) {
+            this._lastParentX = obj.x;
+            this._lastParentY = obj.y;
+            this._lastElevation = doc.elevation;
+            this._dirty = true;
         }
 
-        if (this._ticker) {
-            this._ticker.destroy();
-            this._ticker = null;
+        const currentState = this.parent?.paperbox?.state;
+        
+        if (this._dirty || (currentState && this._hasCameraChanged(currentState))) {
+            this.update(currentState);
+            this._dirty = false;
         }
+    }
 
-        const startValues = {};
-        const props = Object.keys(targetProps);
-        props.forEach(p => startValues[p] = this.state[p] ?? 0);
-
-        let elapsed = 0;
-        this._ticker = new PIXI.Ticker();
-        this._ticker.add((delta) => {
-            elapsed += delta;
-            const progress = Math.min(1, elapsed / duration);
-            const ease = 1 - Math.pow(1 - progress, 3);
-
-            props.forEach(p => {
-                this.state[p] = startValues[p] + (targetProps[p] - startValues[p]) * ease;
-            });
-
-            this._autoUpdate();
-            if (progress >= 1) {
-                this._ticker.destroy();
-                this._ticker = null;
-            }
-        });
-        this._ticker.start();
+    _hasCameraChanged(newState) {
+        const sig = `${newState.tilt.toFixed(4)}-${newState.rotation.toFixed(4)}`;
+        if (this._lastCameraSig !== sig) {
+            this._lastCameraSig = sig;
+            return true;
+        }
+        return false;
     }
 
     /**
-     * Reconstrói a geometria
+     * [INTEGRAÇÃO] Constrói a cena baseada na classe ObjData
      */
-    async buildFromGeometry({ coords, tPoints, height, texturePath }) {
-        this._coords = coords;
-        this._height = height;
-
-        // 1. Carrega a textura usando a lógica que funcionava anteriormente
-        this.texture = await this._loadTexture(texturePath);
-
+    async buildFromGeometry(inputData) {
+        this.isReady = false;
         this.clearSprites();
 
-        const fullLength = getWallLength(coords);
-        const sortedPoints = Array.from(tPoints || [0, 1]).sort((a, b) => a - b);
+        // Aceita JSON cru ou instância de ObjData
+        this.data = inputData instanceof ObjData ? inputData : new ObjData(inputData);
 
-        for (let k = 0; k < sortedPoints.length - 1; k++) {
-            const t0 = sortedPoints[k];
-            const t1 = sortedPoints[k+1];
-            const subCoords = getWallSubSegment(coords, t0, t1);
-            const offset = t0 * fullLength;
+        for (let i = 0; i < this.data.faces.length; i++) {
+            const face = this.data.faces[i];
+            
+            // Carrega textura (usa a da face ou o fallback do material global)
+            const texPath = face.texture || this.data.material.texturePath;
+            const tex = await this._loadTexture(texPath);
 
-            const sprite = this._createTilingSprite(height, offset);
-            if (sprite) {
-                sprite._segmentIndex = k;
-                this.sprites.push(sprite);
-                this.container.addChild(sprite);
+            // Índices e UVs
+            let indices = face.indices;
+            if (!indices || indices.length === 0) {
+                indices = [];
+                for (let k = 1; k < face.vertices.length - 1; k++) indices.push(0, k, k + 1);
             }
+            
+            let uvs = face.uvs;
+            if (!uvs || uvs.length === 0) {
+                // UVs padrão simples
+                uvs = face.vertices.flatMap((_, idx) => [idx % 2, Math.floor(idx/2) % 2]); 
+            }
+
+            const geometry = new PIXI.MeshGeometry(
+                new Float32Array(face.vertices.flatMap(v => [v.x, v.y])), // Placeholder, será atualizado no update
+                new Float32Array(uvs.flat()),
+                new Uint16Array(indices)
+            );
+
+            const material = new PIXI.MeshMaterial(tex);
+            // Aplica cor global se não tiver textura, ou tint
+            if (!texPath) material.tint = this.data.material.color;
+
+            const mesh = new PIXI.Mesh(geometry, material);
+            
+            // Configurações extras de material
+            mesh.alpha = this.data.material.alpha;
+
+            this.container.addChild(mesh);
+            this.pixiMeshes[i] = mesh; // Guarda referência 1:1
         }
-
-        this.isReady = true;
-        this._autoUpdate();
-    }
-
-    _createTilingSprite(height, textureOffset) {
-        // Recupera a textura carregada
-        let tex = this.texture;
-
-        // Garante que é uma PIXI.Texture (lógica do seu código anterior)
-        if (!tex || !(tex instanceof PIXI.Texture)) {
-            tex = tex ? PIXI.Texture.from(tex) : PIXI.Texture.WHITE;
-        }
-
-        // Fallback final para evitar o erro de 'reading x'
-        if (!tex.baseTexture) tex = PIXI.Texture.WHITE;
-
-        // No seu código anterior, você usava texture.height, mas aqui usamos a altura da parede
-        const sprite = new PIXI.TilingSprite(tex, 1, height || tex.height || 100);
         
-        sprite.anchor.set(0.5, 1);
-        sprite._wallData = { textureOffset };
-        return sprite;
+        this.isReady = true;
+        this._dirty = true; // Força primeiro render
     }
 
-    async _loadTexture(path) {
-        try {
-            if (window.foundry?.canvas?.TextureLoader?.loader) {
-                return await foundry.canvas.TextureLoader.loader.loadTexture(path);
+    /**
+     * [INTEGRAÇÃO] O Loop de Renderização Principal
+     */
+    update(cameraState = { tilt: 0, rotation: 0 }) {
+        if (!this.isReady) return;
+        
+        const { tilt, rotation } = cameraState;
+        const parentObj = this.parent.doc.object;
+        
+        // Calculate Unit to Pixel ratio
+        const dims = canvas.dimensions;
+        const pixelPerUnit = dims ? (dims.size / dims.distance) : 1;
+
+        let allProjectedPoints = [];
+
+        // 1. Project all vertices
+        for (let i = 0; i < this.data.faces.length; i++) {
+            const face = this.data.faces[i];
+            const mesh = this.pixiMeshes[i];
+
+            if (!mesh) continue;
+
+            const projectedPoints = [];
+
+            for (const vertex of face.vertices) {
+                // Compute absolute world position (including elevation)
+                const worldPos = this.data.computeWorldPosition(parentObj, vertex, pixelPerUnit);
+
+                // Project to 2D Screen Space
+                const projected = projectPoint(worldPos.x, worldPos.y, worldPos.z, tilt, rotation);
+                projectedPoints.push(projected);
             }
-            return PIXI.Texture.from(path);
-        } catch (e) {
-            console.error("VisualComponent | Erro ao carregar textura:", path, e);
-            return PIXI.Texture.WHITE;
+
+            // Update PIXI Geometry
+            const buffer = mesh.geometry.getBuffer('aVertexPosition');
+            if (buffer) {
+                const data = buffer.data;
+                for (let k = 0; k < projectedPoints.length; k++) {
+                    data[k * 2] = projectedPoints[k].x;
+                    data[k * 2 + 1] = projectedPoints[k].y;
+                }
+                buffer.update();
+            }
+            mesh.hitArea = new PIXI.Polygon(projectedPoints.map(p => new PIXI.Point(p.x, p.y)));
+            mesh.eventMode = 'static';
+            mesh.alpha = this.data.material.alpha;
+
+            // Collect points for the HitArea calculation
+            allProjectedPoints = allProjectedPoints.concat(projectedPoints);
+        }
+
+        // 2. Update HitArea and Selection Frame
+        if (parentObj && allProjectedPoints.length >= 3) {
+            
+            // [CRITICAL] Convert Global Screen Coordinates -> Local Parent Coordinates
+            // The HitArea must be relative to the Tile's (x, y).
+            const localFramePoints = allProjectedPoints.map(p => ({
+                x: p.x - parentObj.x,
+                y: p.y - parentObj.y
+            }));
+
+            // [FIX] Create a Polygon HitArea. 
+            // Foundry will use this polygon to draw the Orange Selection Border.
+            // This ensures the "Frame" follows your 3D shape, not the floor rect.
+            // parentObj.hitArea = new PIXI.Polygon(localFramePoints.flatMap(pt => [pt.x, pt.y]));
+            parentObj.hitArea = null;
+            if (parentObj.controlled) {
+                if (this.customHandles.length === 0) this._createCustomFrameHandles(parentObj, localFramePoints);
+                else this._syncFrameHandles(parentObj, localFramePoints);
+            } else {
+                this.customHandles.forEach(h => h.visible = false);
+            }
+            
+            // Desenha a borda visual (laranja) sem afetar o clique
+            if (parentObj.frame) {
+                this._applyUniversalFrameTransform(parentObj, localFramePoints);
+            }
         }
     }
 
-    update(cameraState = { tilt: 0, rotation: 0 }) {
-        if (!this.isReady || !this._coords) return;
+    _createCustomFrameHandles(obj, localPoints) {
+        // Destrói anteriores
+        this.customHandles.forEach(h => h.destroy());
+        this.customHandles = [];
 
-        const { tilt, rotation } = cameraState;
+        const faceIndex = 0;
+        const gridManager = game.paperbox?.gridManager;
+        const targetFace = this.data.faces[faceIndex];
+        
+        if (!targetFace) return;
 
-        for (const sprite of this.sprites) {
-            // --- Lógica de Espelhamento para Portas Duplas ---
-            const sideConfig = this.side === "right"
-            ? { angle: -this.state.angle, slide: -this.state.slide, pivot: { x: this._coords[2], y: this._coords[3] } }
-            : { angle: this.state.angle, slide: this.state.slide, pivot: { x: this._coords[0], y: this._coords[1] } };
+        targetFace.vertices.forEach((vertex, i) => {
+            if (!localPoints[i]) return;
 
-            let angle = sideConfig.angle;
-            let slide = sideConfig.slide;
-            let pivot = sideConfig.pivot;
-            let lift = this.state.lift;
+            const handle = this._buildHandleGraphic();
+            handle.vertexIndex = i;
+            
+            handle.position.set(localPoints[i].x, localPoints[i].y);
+            
+            // 2. Interatividade explícita na Handle
+            handle.eventMode = 'static'; 
+            handle.cursor = 'pointer';
+            // --- Lógica de Drag (Mantida quase igual, mas ajustada) ---
+            let dragData = null;
 
-            // --- Chamada para o seu math.js ---
-            const transform = calculateTransform({
-                coords: this._coords,
-                height: this._height,
-                tilt,
-                rotation,
-                angle,   // Valor já tratado/invertido
-                pivot, // Pivot na ponta correta
-                slide,       // Valor já tratado/invertido
-                lift
+            const onDragMove = (e) => {
+                if (!dragData || !gridManager) return;
+                
+                // ... (Lógica de matemática inversa mantida igual) ...
+                // Apenas certifique-se de que a lógica interna usa as coordenadas corretas
+                // O código original de onDragMove já usava gridManager.screenToWorld,
+                // então ele deve continuar funcionando bem.
+
+                // ... [CÓDIGO DE CÁLCULO INVERSO EXISTENTE] ...
+                
+                 // 1. Pega onde o mouse está na TELA e converte para MUNDO
+                const global = dragData.global;
+                const world = gridManager.screenToWorld(global);
+                const state = this.parent.paperbox.state;
+
+                const currentZ = vertex.z + this.data.transform.z; 
+                const { x: dx, y: dy } = getProjectionVector(currentZ, state.tilt, state.rotation);
+                
+                const targetWorldX = world.x - dx;
+                const targetWorldY = world.y - dy;
+
+                const t = this.data.transform;
+                const parent = this.parent.doc.object;
+
+                let localX = targetWorldX - parent.x - t.x;
+                let localY = targetWorldY - parent.y - t.y;
+
+                if (t.rotation.z !== 0) {
+                    const cos = Math.cos(-t.rotation.z);
+                    const sin = Math.sin(-t.rotation.z);
+                    const rx = localX * cos - localY * sin;
+                    const ry = localX * sin + localY * cos;
+                    localX = rx;
+                    localY = ry;
+                }
+
+                localX = localX / t.scale.x;
+                localY = localY / t.scale.y;
+
+                this.data.setVertex(faceIndex, i, { x: localX, y: localY });
+                this._dirty = true;
+                this._tickerUpdate(); 
+            };
+
+            const onDragEnd = () => {
+                if (!dragData) return;
+                dragData = null;
+                handle.alpha = 1;
+                canvas.app.stage.off("pointermove", onDragMove);
+                canvas.app.stage.off("pointerup", onDragEnd);
+                canvas.app.stage.off("pointerupoutside", onDragEnd);
+
+                if (this.parent?.doc) {
+                    this.parent.doc.update({
+                        [`flags.${MODULE_ID}.data`]: this.data.toJSON()
+                    });
+                }
+            };
+
+            handle.on("pointerdown", (e) => {
+                e.stopPropagation(); // Importante: Impede que o clique selecione o Tile embaixo
+                dragData = e.data;
+                handle.alpha = 0.5;
+                canvas.app.stage.on("pointermove", onDragMove);
+                canvas.app.stage.on("pointerup", onDragEnd);
+                canvas.app.stage.on("pointerupoutside", onDragEnd);
             });
 
-            // Salva o transform para o Orchestrator (Z-Index)
-            sprite.lastTransform = transform;
-
-            // Aplica a matriz de transformação no PIXI
-            const { a, b, c, d, tx, ty } = transform.matrixParams;
-            sprite.transform.setFromMatrix(new PIXI.Matrix(a, b, c, d, tx, ty));
-            
-            sprite.width = transform.length;
-            sprite.height = this._height * this.state.scale;
-            sprite.alpha = this.state.alpha;
-            
-            sprite.tilePosition.x = -(sprite._wallData?.textureOffset || 0);
-        }
+            obj.frame.addChild(handle);
+            this.customHandles.push(handle);
+        });
     }
 
-    _autoUpdate() {
-        if (this.isReady && this.parent?.paperbox?.state) {
-            this.update(this.parent.paperbox.state);
+    _buildHandleGraphic() {
+        const h = new PIXI.Graphics();
+        // Valores de configuração do handle
+        h.handleRadius = 6; // Raio visual do handle
+        h.hitAreaRadius = 10; // Raio da hitArea
+        h.expandedScale = h.hitAreaRadius / h.handleRadius; // Scale para igualar ao hitArea
+
+        const orangeColor = 0xFF9829; // A mesma cor da linha
+        const blackColor = 0x000000;
+
+        // Desenha o handle padrão
+        h.lineStyle(1, blackColor, 1);
+        h.beginFill(orangeColor, 1);
+        h.drawCircle(0, 0, h.handleRadius);
+        h.endFill();
+
+        // Área de clique maior (invisível) para facilitar o uso
+        h.hitArea = new PIXI.Circle(0, 0, h.hitAreaRadius);
+
+        h.interactive = true;
+        h.cursor = "pointer";
+        h.eventMode = 'static';
+
+        // Efeito de expansão usando scale calculado
+        h.on("pointerover", () => {
+            h.scale.set(h.expandedScale);
+        });
+        h.on("pointerout", () => {
+            h.scale.set(1);
+        });
+        return h;
+    }
+
+    _syncFrameHandles(obj, localPoints) {
+        // Se o objeto não tem frame ou não está "controlado" (selecionado), escondemos as handles
+        // Nota: obj.frame geralmente só existe/é visível quando selecionado ou hover
+        const isSelected = obj.controlled || (obj.frame && obj.frame.visible);
+
+        if (obj.frame && obj.frame.handle) obj.frame.handle.visible = false;
+        if (obj.frame && obj.frame.handles) Object.values(obj.frame.handles).forEach(h => h.visible = false);
+
+        this.customHandles.forEach((h, i) => {
+            if (localPoints[i] && isSelected) {
+                // Atualiza para posição GLOBAL
+                h.position.set(localPoints[i].x, localPoints[i].y); // CORRETO                
+                h.visible = true;
+            } else {
+                h.visible = false;
+            }
+        });
+    }
+    
+    _applyUniversalFrameTransform(obj, localPoints) {
+        if (!obj.frame) return;
+        
+        // Create a dedicated graphics container if not exists
+        if (!this._borderGraphics || this._borderGraphics.destroyed) {
+            this._borderGraphics = new PIXI.Graphics();
+            // Add at index 0 to be behind the resize handles
+            obj.frame.addChildAt(this._borderGraphics, 0);
+        }
+        
+        const border = this._borderGraphics;
+        border.clear();
+        
+        // Style: Orange/Gold standard Foundry selection color
+        border.lineStyle(2, 0xFF9829, 1); 
+        // Optional: Add a faint fill to make the "footprint" visible
+        border.beginFill(0xFF9829, 0.05); 
+        
+        if (localPoints.length > 0) {
+            border.moveTo(localPoints[0].x, localPoints[0].y);
+            for (let i = 1; i < localPoints.length; i++) {
+                border.lineTo(localPoints[i].x, localPoints[i].y);
+            }
+            border.closePath();
+        }
+        border.endFill();
+        
+        // Sync custom handles positions
+        if (this.customHandles.length === 0 && localPoints.length > 0) {
+            this._createCustomFrameHandles(obj, localPoints);
+        }
+        
+        this._syncFrameHandles(obj, localPoints);
+    }
+
+    async _loadTexture(input) {
+        if (!input) return PIXI.Texture.WHITE;
+        
+        try {
+            // Tentativa 1: Método moderno do PIXI (V12+)
+            return await PIXI.Assets.load(input);
+        } catch (e) {
+            // Tentativa 2: Fallback para o método do Foundry (V10/V11)
+            // Se PIXI.Assets falhar, usamos o texture loader do Foundry
+            const texture = await new Promise((resolve, reject) => {
+                // Verifica onde a função existe na versão atual do Foundry
+                const loader = foundry.utils?.loadTexture || canvas.app?.renderer?.generateTexture;
+                if (loader) {
+                    loader(input).then(resolve).catch(reject);
+                } else {
+                    // Último recurso: Texture.from
+                    resolve(PIXI.Texture.from(input));
+                }
+            });
+            return texture;
         }
     }
 
     clearSprites() {
-        for (const sprite of this.sprites) {
-            if (sprite.parent) sprite.parent.removeChild(sprite);
-            sprite.destroy();
+        this.pixiMeshes.forEach(m => m.destroy({ children: true }));
+        this.pixiMeshes = [];
+        this.customHandles.forEach(h => h.destroy());
+        this.customHandles = [];
+        if (this._borderGraphics) {
+            this._borderGraphics.destroy();
+            this._borderGraphics = null;
         }
-        this.sprites = [];
     }
 
     destroy() {
-        if (this._ticker) this._ticker.destroy();
+        if (canvas?.app?.ticker && this._tickerFunction) {
+            canvas.app.ticker.remove(this._tickerFunction);
+        }
         this.clearSprites();
     }
 }
